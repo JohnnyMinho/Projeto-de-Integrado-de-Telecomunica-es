@@ -23,8 +23,13 @@ static BLEUUID UUID_TEMP_CHARACTERISTIC("eea1aa7d-b9b9-4ddf-a575-05b7a37b139c");
 static BLEUUID UUID_HUMD_CHARACTERISTIC("9d9031b5-191f-4e2d-9791-1c2240e74a8d");
 static BLERemoteCharacteristic* Remote_Humd_Characteristic;
 static BLERemoteCharacteristic* Remote_Temp_Characteristic;
+static BLERemoteCharacteristic* Remote_Temp_Humd_Characteristic;
 //static BLERemoteCharacteristic* Remote_Press_Characteristic;
 static BLEAdvertisedDevice* Gateway_Usado; //Servidor Basicamente
+byte pacote[3];
+byte HeaderTEMP = 0b00010000;
+byte HeaderHUMD = 0b00010010;
+byte HeaderPRES = 0b00010100;
 char* Temp_Data;
 char* Humd_Data;
 
@@ -90,29 +95,35 @@ bool conectar_servidor(){ //Criamos um cliente e conectamos ao servidor
     return false;
   }
   
-  Remote_Humd_Characteristic = Temp_Servico -> getCharacteristic(UUID_HUMD_CHARACTERISTIC); //Obtemos as caracteristicas do Gateway e seguidamente verificamos se as mesmas são válidas 
+  Remote_Temp_Humd_Characteristic = Temp_Servico -> getCharacteristic(UUID_Characteristic_Server); //Obtemos as caracteristicas do Gateway e seguidamente verificamos se as mesmas são válidas 
+
+  Remote_Humd_Characteristic = Temp_Servico -> getCharacteristic(UUID_HUMD_CHARACTERISTIC);
+
   Remote_Temp_Characteristic = Temp_Servico -> getCharacteristic(UUID_TEMP_CHARACTERISTIC);
-  
-  if(Remote_Humd_Characteristic == nullptr || Remote_Temp_Characteristic == nullptr){ //Só verificamos os casos em que falhou já que se tudo correr bem, não é necessário uma alteração do progresso
+  if(Remote_Temp_Humd_Characteristic == nullptr){ //Só verificamos os casos em que falhou já que se tudo correr bem, não é necessário uma alteração do progresso
     DHT11_SENSOR->disconnect();
     Serial.println("Characteristic Error");
     return false;
   }
   
-  if(Remote_Humd_Characteristic->canRead()){
-    std::string mostrar = Remote_Humd_Characteristic->readValue();
-    Serial.println(mostrar.c_str());
-  }
-  if(Remote_Temp_Characteristic->canRead()){
-    std::string mostrar = Remote_Temp_Characteristic->readValue();
+  /*if(Remote_Temp_Humd_Characteristic->canRead(),){
+    std::string mostrar = Remote_Temp_Humd_Characteristic->readValue();
     Serial.println(mostrar.c_str());
   }
 
-  if(Remote_Humd_Characteristic->canNotify() && Remote_Temp_Characteristic->canNotify()){
-    Remote_Humd_Characteristic->registerForNotify(notifyCallBack_HUMD);
+  if(Remote_Temp_Humd_Characteristic->canNotify()){
+    Remote_Temp_Humd_Characteristic->registerForNotify(notifyCallBack_TEMP);
+  }*/
+  if(Remote_Temp_Humd_Characteristic->canRead(),Remote_Humd_Characteristic->canRead(),Remote_Temp_Characteristic->canRead()){
+    std::string mostrar = Remote_Temp_Humd_Characteristic->readValue();
+    Serial.println(mostrar.c_str());
+  }
+
+  if(Remote_Temp_Humd_Characteristic->canNotify(),Remote_Humd_Characteristic->canNotify(),Remote_Temp_Characteristic->canNotify()){
+    Remote_Temp_Humd_Characteristic->registerForNotify(notifyCallBack_TEMP);
     Remote_Temp_Characteristic->registerForNotify(notifyCallBack_TEMP);
+    Remote_Humd_Characteristic->registerForNotify(notifyCallBack_HUMD);
   }
-
   IMConnected = true; //Como todos os passos foram validados, podemos considerar que o Sensor está conectado ao GATEWAY logo o booleano que assim o define é dado o valor de true
   return true;
   
@@ -149,17 +160,38 @@ void loop(){
       Serial.println("Failed to read temperature or humidity");
     }
     else{
-
-      String toSend_Temp = ("Temp: " + String(temp));
+      temperatura_nova = true;
+      humidade_nova = true;
+      Serial.println(temp);
+      Serial.println(humd);
+     /*String toSend_Temp = ("Temp: " + String(temp));
       
       String toSend_Humd = ("Humd: " + String(humd));
-    Remote_Temp_Characteristic->writeValue(toSend_Temp.c_str(), toSend_Temp.length());
-    Remote_Humd_Characteristic->writeValue(toSend_Humd.c_str(), toSend_Humd.length());
+
+      String toSend_data = (toSend_Temp + " " + toSend_Humd);*/
+      while(temperatura_nova){
+        pacote[0] = HeaderTEMP;
+        pacote[1] = temp;
+        pacote[2] = 0b00000000;
+        Remote_Temp_Humd_Characteristic->writeValue(pacote, sizeof(pacote));
+        temperatura_nova = false;
+        
+      }
+       while(temperatura_nova){
+        pacote[0] = HeaderHUMD;
+        pacote[1] = humd;
+        pacote[2] = 0b00000000;
+        Remote_Temp_Humd_Characteristic->writeValue(pacote, sizeof(pacote));
+        humidade_nova = false;
+      }
+   // Remote_Temp_Humd_Characteristic->writeValue(toSend_Temp.c_str(), toSend_Temp.length());
+   // Remote_Humd_Characteristic->writeValue(toSend_Humd.c_str(), toSend_Humd.length());
+    //Remote_Temp_Humd_Characteristic->writeValue(toSend_data.c_str(), toSend_data.length());
     }
     
   } 
   else if(Scan_BLE){
-    BLEDevice::getScan() -> start(0); 
+    BLEDevice::getScan() -> start(30); 
   }
   
   /*humd = dht.readHumidity();
