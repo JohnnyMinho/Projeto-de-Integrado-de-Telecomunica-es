@@ -1,7 +1,7 @@
 
 #include <SPI.h>;
 #include <printf.h>;
-#include "CRCx.h";
+#include <math.h>;
 #include "DHT.h";
 #include <BLEDevice.h>
 #include <BLEUtils.h>
@@ -26,7 +26,7 @@ static BLERemoteCharacteristic* Remote_Temp_Characteristic;
 static BLERemoteCharacteristic* Remote_Temp_Humd_Characteristic;
 //static BLERemoteCharacteristic* Remote_Press_Characteristic;
 static BLEAdvertisedDevice* Gateway_Usado; //Servidor Basicamente
-byte pacote[3];
+char pacote[6];
 byte HeaderTEMP = 0b00010000;
 byte HeaderHUMD = 0b00010010;
 byte HeaderPRES = 0b00010100;
@@ -39,6 +39,8 @@ long int BLE_interval_time = 1000; //1000 micros de espera entre janelas de scan
 long int BLE_Window_Time = 1000; //1000 micros de tempo de scan por janela
 float temp = 0; //guardar temperatura
 float humd = 0; //guardar humidade
+int temp_send = 0;
+int humd_send = 0;
 
 class MyClientCallback : public BLEClientCallbacks{
   void onConnect(BLEClient* DHT11_SENSOR_temp){
@@ -105,7 +107,16 @@ bool conectar_servidor(){ //Criamos um cliente e conectamos ao servidor
     Serial.println("Characteristic Error");
     return false;
   }
-  
+  if(Remote_Temp_Characteristic == nullptr){ //Só verificamos os casos em que falhou já que se tudo correr bem, não é necessário uma alteração do progresso
+    DHT11_SENSOR->disconnect();
+    Serial.println("Characteristic Error");
+    return false;
+  }
+  if(Remote_Humd_Characteristic == nullptr){ //Só verificamos os casos em que falhou já que se tudo correr bem, não é necessário uma alteração do progresso
+    DHT11_SENSOR->disconnect();
+    Serial.println("Characteristic Error");
+    return false;
+  }
   /*if(Remote_Temp_Humd_Characteristic->canRead(),){
     std::string mostrar = Remote_Temp_Humd_Characteristic->readValue();
     Serial.println(mostrar.c_str());
@@ -116,18 +127,40 @@ bool conectar_servidor(){ //Criamos um cliente e conectamos ao servidor
   }*/
   if(Remote_Temp_Humd_Characteristic->canRead(),Remote_Humd_Characteristic->canRead(),Remote_Temp_Characteristic->canRead()){
     std::string mostrar = Remote_Temp_Humd_Characteristic->readValue();
+    std::string mostrar2 = Remote_Temp_Characteristic->readValue();
+    std::string mostrar3 = Remote_Humd_Characteristic->readValue();
     Serial.println(mostrar.c_str());
+    Serial.println(mostrar2.c_str());
+    Serial.println(mostrar3.c_str());
   }
 
-  if(Remote_Temp_Humd_Characteristic->canNotify(),Remote_Humd_Characteristic->canNotify(),Remote_Temp_Characteristic->canNotify()){
+  if(Remote_Temp_Humd_Characteristic->canNotify()){
     Remote_Temp_Humd_Characteristic->registerForNotify(notifyCallBack_TEMP);
-    Remote_Temp_Characteristic->registerForNotify(notifyCallBack_TEMP);
+   
+  }
+  if(Remote_Humd_Characteristic->canNotify()){
+    
     Remote_Humd_Characteristic->registerForNotify(notifyCallBack_HUMD);
+  }
+  if(Remote_Temp_Characteristic->canNotify()){
+    
+    Remote_Temp_Characteristic->registerForNotify(notifyCallBack_TEMP);
+    
   }
   IMConnected = true; //Como todos os passos foram validados, podemos considerar que o Sensor está conectado ao GATEWAY logo o booleano que assim o define é dado o valor de true
   return true;
-  
 }
+
+/*int roundvalue(float x){
+  int y;
+  if(x-(int)x<0.5){
+    y = floor(x);
+  }
+  if(x-(int)x>0.5){
+    y = ceil(x);
+  }
+  return y;
+}*/
 
 void setup() {
   Serial.begin(115200);
@@ -137,7 +170,7 @@ void setup() {
   Scanner_BLE -> setInterval(BLE_interval_time);
   Scanner_BLE -> setWindow(BLE_Window_Time);
   Scanner_BLE -> setActiveScan(true);
-  Scanner_BLE -> start(30);
+  Scanner_BLE -> start(0);
   dht.begin();
 }
 
@@ -154,6 +187,8 @@ void loop(){
   doConnect = false;
  }
  if(IMConnected){
+    int t = 0;
+    int h = 0;
     humd = dht.readHumidity();
     temp = dht.readTemperature();
     if(isnan(temp) || isnan(humd)){
@@ -162,36 +197,50 @@ void loop(){
     else{
       temperatura_nova = true;
       humidade_nova = true;
-      Serial.println(temp);
-      Serial.println(humd);
-     /*String toSend_Temp = ("Temp: " + String(temp));
       
-      String toSend_Humd = ("Humd: " + String(humd));
+      //Serial.println(temp);
+      //Serial.println(humd);
+      
+     String toSend_Temp = (String(temp));
+      
+      String toSend_Humd = (String(humd));
 
-      String toSend_data = (toSend_Temp + " " + toSend_Humd);*/
-      while(temperatura_nova){
-        pacote[0] = HeaderTEMP;
-        pacote[1] = temp;
-        pacote[2] = 0b00000000;
-        Remote_Temp_Humd_Characteristic->writeValue(pacote, sizeof(pacote));
+      //String toSend_data = (toSend_Temp + " " + toSend_Humd);
+      Serial.print("Temperatura: ");
+      Serial.println(toSend_Temp);
+      Serial.print("Humd: ");
+      Serial.println(toSend_Humd);
+      if(temperatura_nova){
+        pacote[0] = toSend_Temp[0];    
+        pacote[1] = toSend_Temp[1];
+        pacote[2] = toSend_Temp[2];
+        pacote[3] = toSend_Temp[3];
+        pacote[4] = toSend_Temp[4];    
+        pacote[5] = toSend_Temp[5]; 
+        pacote[6] = '\0';
+        Remote_Temp_Characteristic->writeValue(pacote, 6);
         temperatura_nova = false;
-        
-      }
-       while(temperatura_nova){
-        pacote[0] = HeaderHUMD;
-        pacote[1] = humd;
-        pacote[2] = 0b00000000;
-        Remote_Temp_Humd_Characteristic->writeValue(pacote, sizeof(pacote));
+      }      
+      delay(2000);
+       if(humidade_nova){
+        pacote[0] = toSend_Humd[0];    
+        pacote[1] = toSend_Humd[1];
+        pacote[2] = toSend_Humd[2];
+        pacote[3] = toSend_Humd[3];   
+        pacote[4] = toSend_Humd[4];
+        pacote[5] = toSend_Humd[5]; 
+        pacote[6] = '\0';
+        Remote_Humd_Characteristic->writeValue(pacote, 6);
         humidade_nova = false;
       }
+      delay(2000);
    // Remote_Temp_Humd_Characteristic->writeValue(toSend_Temp.c_str(), toSend_Temp.length());
    // Remote_Humd_Characteristic->writeValue(toSend_Humd.c_str(), toSend_Humd.length());
     //Remote_Temp_Humd_Characteristic->writeValue(toSend_data.c_str(), toSend_data.length());
     }
-    
   } 
   else if(Scan_BLE){
-    BLEDevice::getScan() -> start(30); 
+    BLEDevice::getScan() -> start(0); 
   }
   
   /*humd = dht.readHumidity();
@@ -207,6 +256,6 @@ void loop(){
     Serial.print(temp);
     Serial.println(" ºC");
   }*/
-  delay(1000);
+  
   
 }
