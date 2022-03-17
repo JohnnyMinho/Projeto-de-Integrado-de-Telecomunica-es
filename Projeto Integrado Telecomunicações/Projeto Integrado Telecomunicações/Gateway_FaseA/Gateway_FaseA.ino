@@ -2,42 +2,178 @@
 #include <BLEUtils.h>
 #include <BLEServer.h>
 #include "ThingSpeak.h"
+#include <stdlib.h>
 #include <WiFi.h>
+#include <stdio.h>
+#include "INTINFO.h"
 
-#define UUID_SERVER_SERVICE "72add083-b931-4efc-ba71-4eaf935e0465"
-#define UUID_Characteristic_Server "cf15383a-afe7-4d44-b24d-a6363e93793e"
-#define UUID_TEMP_CHARACTERISTIC "eea1aa7d-b9b9-4ddf-a575-05b7a37b139c"
-#define UUID_HUMD_CHARACTERISTIC "9d9031b5-191f-4e2d-9791-1c2240e74a8d"
-#define UUID_PRESS_CHARACTERISTIC "01bcb788-7258-43b3-be93-f35dad0ac2f4"
 #define Server_Name "GATEWAY_SENSORES"
+#define ThingSpeak_Timer
+#define MAX_TIME_SEND 20000
+//Variáveis ligadas ao BLE
 
-const char* ssid = "Mi 10T Pro";
-const char* password = "gusmaogusmao";
+static BLEUUID UUID_SERVER_SERVICE ("72add083-b931-4efc-ba71-4eaf935e0465");
+static BLEUUID UUID_Characteristic_Server ("cf15383a-afe7-4d44-b24d-a6363e93793e");
+static BLEUUID UUID_TEMP_CHARACTERISTIC ("eea1aa7d-b9b9-4ddf-a575-05b7a37b139c"); //Tentar receber todos os dados na forma de uma só caracteristica de modo a poupar trabalho
+static BLEUUID UUID_HUMD_CHARACTERISTIC ("9d9031b5-191f-4e2d-9791-1c2240e74a8d");
+static BLEUUID UUID_PRESS_CHARACTERISTIC ("01bcb788-7258-43b3-be93-f35dad0ac2f4");
+
+BLEServer *Gateway_Server_BLE;
+BLEService *Gateway_Service;
+BLECharacteristic *Gateway_Received_Charac;
+BLECharacteristic *Gateway_Characteristic_TEMP;
+BLECharacteristic *Gateway_Characteristic_HUMD;
+BLECharacteristic *Gateway_Characteristic_PRESS;
+//------------------------
+
+// Variáveis ligadas à WiFi
+
+
+char* ssid = ssidlab;
+char* password = passwordlab;
+
 
 WiFiClient cliente_internet;
 
-unsigned long myChannelnum = X;
-const char MyApiKey = " "; // Substituir por chave do canal do thingspeak
+unsigned long myChannelnum = 1666652;
+const char *MyApiKey = "DZCFYQTOXYIUTK2J"; // Substituir por chave do canal do thingspeak
 
 unsigned long lastTime = 0;
 unsigned long Delay_time = 1000;
 
+// -------------------------------
+
+//Variáveis gerais
+byte byteSTOP = 0b00010000;
+byte byteSTART = 0b00010010;
+byte byteCHANGETIME = 0b00010100;
+
+boolean deviceConnected = false;
+boolean sensor_temp_enviar = false;
+boolean sensor_humd_enviar = false;
+boolean sensor_press_enviar = false;
+boolean caracteristica_pressure = false;
+boolean caracteristica_temp = false;
+boolean caracteristica_humd = false;
+boolean WiFi_Connected = false;
+char value_temp[6];
+char value_humd[6];
+char value_pressure[6];
+byte pacote_comando[2];
 float temp;
 float humd;
+float pressure;
+float humd_send;
+float temp_send;
+float pressure_send;
+int test_speak = 0;
 
+//-------------------------------
+
+class MyServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+      Serial.println("Device Connected");
+      deviceConnected = true;
+    }
+    void onDisconnect(BLEServer* pServer) {
+
+    }
+};
+
+class MyCallbacks: public BLECharacteristicCallbacks
+{
+    void onWrite(BLECharacteristic *pCharacteristic)
+    {
+      std::string value;
+      if ((pCharacteristic->getUUID().equals(UUID_TEMP_CHARACTERISTIC)) && !caracteristica_temp) {
+        caracteristica_temp = true;
+        value = pCharacteristic->getValue();
+      }
+      if ((pCharacteristic->getUUID().equals(UUID_HUMD_CHARACTERISTIC)) && !caracteristica_humd) {
+        caracteristica_humd = true;
+        value = pCharacteristic->getValue();
+      }
+      if ((pCharacteristic->getUUID().equals(UUID_PRESS_CHARACTERISTIC)) && !caracteristica_pressure) {
+        caracteristica_pressure = true;
+        value = pCharacteristic->getValue();
+      }
+      if (value.length() > 0)
+      {
+        for (int i = 0; i < value.length(); i++)
+        {
+          // Serial.print((char)value[i]);
+          if (caracteristica_temp) {
+            value_temp[i] = value[i];
+            Serial.print("temp" );
+            Serial.print((char)value_temp[i]);
+            sensor_temp_enviar = true;
+          }
+          if (caracteristica_humd) {
+            value_humd[i] = value[i];
+            Serial.print("humd" );
+            Serial.print((char)value_humd[i]);
+            sensor_humd_enviar = true;
+          }
+          if (caracteristica_pressure) {
+            value_pressure[i] = value[i];
+            Serial.print("temp" );
+            Serial.print((char)value_pressure[i]);
+            sensor_press_enviar = true;
+          }
+        }
+        value_temp[5] = '\0';
+        value_humd[5] = '\0';
+        value_pressure[5] = '\0';
+        Serial.println(" ");
+        if ((sensor_temp_enviar)) {
+          temp_send = atof(value_temp);
+        }
+        if ((sensor_humd_enviar)) {
+          humd_send = atof(value_humd);
+        }
+        if ((sensor_press_enviar)) {
+          pressure_send = atof(value_pressure);
+        }
+        caracteristica_temp = false;
+        caracteristica_humd = false;
+        caracteristica_pressure = false;
+        Serial.println(temp_send);
+        Serial.println(humd_send);
+        Serial.println(pressure_send);
+      }
+    }
+};
 
 void setup() {
   Serial.begin(115200);
   Serial.println("Starting BLE Server!");
-
-  BLEDevice::init("Rugby_Pescoço"); // BLEDevice::init("GATEWAY_SENSORES");
-  BLEServer *Servidor_BLE = BLEDevice::createServer();
-  BLEService *Servico1_Server = Servidor_BLE->createService(UUID_SERVER_SERVICE);
-  BLECharacteristic *Characteristic_Server = Servico1_Server->createCharacteristic(UUID_Characteristic_Server,
-                                                                                   BLECharacteristic::PROPERTY_READ | 
-                                                                                   BLECharacteristic::PROPERTY_WRITE);
-  Characteristic_Server -> setValue("BANDOLHERO BANDOLHERA SE QUI SE NO PUEDE VIVER ASI.");
-  Servico1_Server->start();
+  WiFi.begin(ssid, password);
+  BLEDevice::init("Gateway_Sensor"); // BLEDevice::init("GATEWAY_SENSORES");
+  Gateway_Server_BLE = BLEDevice::createServer();
+  Gateway_Service = Gateway_Server_BLE->createService(UUID_SERVER_SERVICE);
+  
+  Gateway_Received_Charac = Gateway_Service->createCharacteristic(UUID_Characteristic_Server,
+                            BLECharacteristic::PROPERTY_READ |
+                            BLECharacteristic::PROPERTY_WRITE);
+  Gateway_Characteristic_TEMP = Gateway_Service -> createCharacteristic(UUID_TEMP_CHARACTERISTIC,
+                                BLECharacteristic::PROPERTY_READ |
+                                BLECharacteristic::PROPERTY_WRITE);
+  Gateway_Characteristic_HUMD = Gateway_Service -> createCharacteristic(UUID_HUMD_CHARACTERISTIC,
+                                BLECharacteristic::PROPERTY_READ |
+                                BLECharacteristic::PROPERTY_WRITE);
+  Gateway_Characteristic_PRESS = Gateway_Service -> createCharacteristic(UUID_PRESS_CHARACTERISTIC,
+                                BLECharacteristic::PROPERTY_READ |
+                                BLECharacteristic::PROPERTY_WRITE);
+                                
+  Gateway_Received_Charac->setCallbacks(new MyCallbacks());
+  Gateway_Characteristic_TEMP -> setCallbacks(new MyCallbacks());
+  Gateway_Characteristic_HUMD -> setCallbacks(new MyCallbacks());
+  Gateway_Characteristic_PRESS -> setCallbacks(new MyCallbacks());
+  Gateway_Received_Charac -> setValue("GateWay_Sensor_UC_PIT_G1");
+  Gateway_Characteristic_TEMP -> setValue(".");
+  Gateway_Characteristic_HUMD -> setValue(".");
+  Gateway_Characteristic_PRESS -> setValue(".");
+  Gateway_Service->start();
   BLEAdvertising *Ad_Servidor = BLEDevice::getAdvertising();
   Ad_Servidor->addServiceUUID(UUID_SERVER_SERVICE);
   Ad_Servidor->setScanResponse(true);
@@ -46,18 +182,104 @@ void setup() {
   Serial.println("Starting to Search Clients Now");
 
   WiFi.mode(WIFI_STA);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.println("Attempting connecting to ThingSpeak");
+    WiFi.begin(ssid, password);
+    delay(4000);
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    WiFi_Connected = true;
+  }
   ThingSpeak.begin(cliente_internet);
-  
+  Serial.println("Conected to ThingSpeak");
+
 }
 
 void loop() {
-  while(WiFi.status() != WL_CONNECTED){
-    Serial.println("Attempting connecting to ThingSpeak);
-    WiFi.begin(ssid, password);
-    delay(2500);
+  String toSend;
+  int i;
+  //String caracteristica_recebida;
+  //std::string temp = Gateway_Characteristic_TEMP->getValue();
+  //std::string temp = Gateway_Characteristic_HUMD->getValue();*/
+  //Gateway_Received_Charac->getValue();
+  //Gateway_Characteristic_TEMP->getValue();
+  // Gateway_Characteristic_HUMD->getValue();
+  if(Serial.available()>0){
+    if(Serial.read() == '1'){
+      Serial.println("TEMPO DE STOP (0 PARA PARAR INDIFINITIVAMENTE");
+      while(!Serial.available());
+      pacote_comando[2] = (byte)(int)(Serial.read());
+    }
+    if(Serial.read() == '2'){
+      Serial.println("TEMPO DE START (0 PARA PARA INICIAR IMEDIATAMENTE");
+      while(!Serial.available());
+      pacote_comando[2] = (byte)(int)(Serial.read());
+    }
+    if(Serial.read() == '3'){
+      Serial.println("TEMPO ENTRE AMOSTRAGENS NOS SENSORES");;
+      while(!Serial.available());
+      pacote_comando[2] = (byte)(int)(Serial.read());
+    }
+    }
+    
+  
+  if(Gateway_Server_BLE->getConnectedCount() <= 0) {
+    Serial.println("SEM SENSORES LIGADOS");
+    sensor_temp_enviar = false;
+    sensor_humd_enviar = false;
+    BLEAdvertising *Ad_Servidor = BLEDevice::getAdvertising();
+    Ad_Servidor->addServiceUUID(UUID_SERVER_SERVICE);
+    Ad_Servidor->setScanResponse(true);
+    Ad_Servidor->setMinPreferred(0x12);
+    BLEDevice::startAdvertising();
+    delay(5000);
   }
-  Serial.println("Conected to ThingSpeak");
-  delay(1000);
+  else {
+    while (sensor_temp_enviar) {
+      Serial.print("temp tent");
+      test_speak = ThingSpeak.writeField(myChannelnum, 1, value_temp, MyApiKey);
+      Serial.println(test_speak);
+      if (test_speak == 200) {
+        Serial.print("sucess temp");
+        sensor_temp_enviar = false;
+      }
+
+    }
+    delay(MAX_TIME_SEND);
+    while (sensor_humd_enviar) {
+      Serial.print("humd tent");
+      test_speak = ThingSpeak.writeField(myChannelnum, 2, value_humd, MyApiKey);
+      Serial.println(test_speak);
+      if (test_speak == 200) {
+        Serial.print("humd sucess");
+        sensor_humd_enviar = false;
+      }
+    }
+    delay(MAX_TIME_SEND);
+    while (sensor_press_enviar) {
+      Serial.print("pressure tent");
+      test_speak = ThingSpeak.writeField(myChannelnum, 3, value_pressure, MyApiKey);
+      Serial.println(test_speak);
+      if (test_speak == 200) {
+        Serial.print("pressure sucess");
+        sensor_press_enviar = false;
+      }
+    }
+    delay(MAX_TIME_SEND);
+  }
+  /*if(caracteristica_recebida.length() > 0){ // verifica que a string recebida a partir da central de sensor é superior a 0, logo recebeu algo
+    Serial.println("A Receber Temperatura e Humidade");
+    for(i = 0; i<caracteristica_recebida.length(); i++){
+    Serial.print(caracteristica_recebida[i]);
+    }*/
+
+  /*else if(caracteristica_recebida == UUID_HUMD_CHARACTERISTIC){
+    Serial.println("A Receber Humidade");
+    }*/
+  /* if(WiFi_Connected){
+     ThingSpeak.writeField(myChannelnum  m);
+    }*/
   // put your main code here, to run repeatedly:
 
 }

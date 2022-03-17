@@ -1,5 +1,4 @@
-#include "RF24.h"
-#include "nRF24L01.h"
+
 #include <SPI.h>;
 #include <printf.h>;
 #include "CRCx.h";
@@ -9,7 +8,7 @@
 #include <stdio.h>
 #include <BLEServer.h>
 
-#define Sensor_Name "DHT11-TEMP&HUMD"
+#define Sensor_Name "Gateway_Sensor"
 #define DHTPIN 17 //Define o pino a que o DHT vai transmitir os dados na placa ESP32, neste caso é o RX logo é o pin 40
 #define TIPODHT DHT11 //Define o tipo de DHT usado neste caso o DHT11
 
