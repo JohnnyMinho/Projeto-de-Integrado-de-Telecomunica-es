@@ -23,14 +23,14 @@ BLEService *Gateway_Service;
 BLECharacteristic *Gateway_Received_Charac;
 BLECharacteristic *Gateway_Characteristic_TEMP;
 BLECharacteristic *Gateway_Characteristic_HUMD;
-
+BLECharacteristic *Gateway_Characteristic_PRESS;
 //------------------------
 
 // Variáveis ligadas à WiFi
 
 
-char* ssid = ssidhotspot;
-char* password = passwordhotspot;
+char* ssid = ssidlab;
+char* password = passwordlab;
 
 
 WiFiClient cliente_internet;
@@ -44,24 +44,28 @@ unsigned long Delay_time = 1000;
 // -------------------------------
 
 //Variáveis gerais
-byte HeaderTEMP = 0b00010000;
-byte HeaderHUMD = 0b00010010;
-byte HeaderPRES = 0b00010100;
+byte byteSTOP = 0b00010000;
+byte byteSTART = 0b00010010;
+byte byteCHANGETIME = 0b00010100;
+
 boolean deviceConnected = false;
 boolean sensor_temp_enviar = false;
 boolean sensor_humd_enviar = false;
+boolean sensor_press_enviar = false;
+boolean caracteristica_pressure = false;
 boolean caracteristica_temp = false;
 boolean caracteristica_humd = false;
 boolean WiFi_Connected = false;
 char value_temp[6];
 char value_humd[6];
-char value_aux[6]; //ajuda na representação dos dados
+char value_pressure[6];
+byte pacote_comando[2];
 float temp;
 float humd;
+float pressure;
 float humd_send;
 float temp_send;
-int temp_test;
-int humd_test;
+float pressure_send;
 int test_speak = 0;
 
 //-------------------------------
@@ -89,7 +93,10 @@ class MyCallbacks: public BLECharacteristicCallbacks
         caracteristica_humd = true;
         value = pCharacteristic->getValue();
       }
-
+      if ((pCharacteristic->getUUID().equals(UUID_PRESS_CHARACTERISTIC)) && !caracteristica_pressure) {
+        caracteristica_pressure = true;
+        value = pCharacteristic->getValue();
+      }
       if (value.length() > 0)
       {
         for (int i = 0; i < value.length(); i++)
@@ -107,10 +114,16 @@ class MyCallbacks: public BLECharacteristicCallbacks
             Serial.print((char)value_humd[i]);
             sensor_humd_enviar = true;
           }
-
+          if (caracteristica_pressure) {
+            value_pressure[i] = value[i];
+            Serial.print("temp" );
+            Serial.print((char)value_pressure[i]);
+            sensor_press_enviar = true;
+          }
         }
         value_temp[5] = '\0';
         value_humd[5] = '\0';
+        value_pressure[5] = '\0';
         Serial.println(" ");
         if ((sensor_temp_enviar)) {
           temp_send = atof(value_temp);
@@ -118,10 +131,15 @@ class MyCallbacks: public BLECharacteristicCallbacks
         if ((sensor_humd_enviar)) {
           humd_send = atof(value_humd);
         }
+        if ((sensor_press_enviar)) {
+          pressure_send = atof(value_pressure);
+        }
         caracteristica_temp = false;
         caracteristica_humd = false;
+        caracteristica_pressure = false;
         Serial.println(temp_send);
         Serial.println(humd_send);
+        Serial.println(pressure_send);
       }
     }
 };
@@ -133,6 +151,7 @@ void setup() {
   BLEDevice::init("Gateway_Sensor"); // BLEDevice::init("GATEWAY_SENSORES");
   Gateway_Server_BLE = BLEDevice::createServer();
   Gateway_Service = Gateway_Server_BLE->createService(UUID_SERVER_SERVICE);
+  
   Gateway_Received_Charac = Gateway_Service->createCharacteristic(UUID_Characteristic_Server,
                             BLECharacteristic::PROPERTY_READ |
                             BLECharacteristic::PROPERTY_WRITE);
@@ -142,12 +161,18 @@ void setup() {
   Gateway_Characteristic_HUMD = Gateway_Service -> createCharacteristic(UUID_HUMD_CHARACTERISTIC,
                                 BLECharacteristic::PROPERTY_READ |
                                 BLECharacteristic::PROPERTY_WRITE);
+  Gateway_Characteristic_PRESS = Gateway_Service -> createCharacteristic(UUID_PRESS_CHARACTERISTIC,
+                                BLECharacteristic::PROPERTY_READ |
+                                BLECharacteristic::PROPERTY_WRITE);
+                                
   Gateway_Received_Charac->setCallbacks(new MyCallbacks());
   Gateway_Characteristic_TEMP -> setCallbacks(new MyCallbacks());
   Gateway_Characteristic_HUMD -> setCallbacks(new MyCallbacks());
+  Gateway_Characteristic_PRESS -> setCallbacks(new MyCallbacks());
   Gateway_Received_Charac -> setValue("GateWay_Sensor_UC_PIT_G1");
   Gateway_Characteristic_TEMP -> setValue(".");
   Gateway_Characteristic_HUMD -> setValue(".");
+  Gateway_Characteristic_PRESS -> setValue(".");
   Gateway_Service->start();
   BLEAdvertising *Ad_Servidor = BLEDevice::getAdvertising();
   Ad_Servidor->addServiceUUID(UUID_SERVER_SERVICE);
@@ -175,13 +200,31 @@ void loop() {
   String toSend;
   int i;
   //String caracteristica_recebida;
-
   //std::string temp = Gateway_Characteristic_TEMP->getValue();
   //std::string temp = Gateway_Characteristic_HUMD->getValue();*/
   //Gateway_Received_Charac->getValue();
   //Gateway_Characteristic_TEMP->getValue();
   // Gateway_Characteristic_HUMD->getValue();
-  if (Gateway_Server_BLE->getConnectedCount() <= 0) {
+  if(Serial.available()>0){
+    if(Serial.read() == '1'){
+      Serial.println("TEMPO DE STOP (0 PARA PARAR INDIFINITIVAMENTE");
+      while(!Serial.available());
+      pacote_comando[2] = (byte)(int)(Serial.read());
+    }
+    if(Serial.read() == '2'){
+      Serial.println("TEMPO DE START (0 PARA PARA INICIAR IMEDIATAMENTE");
+      while(!Serial.available());
+      pacote_comando[2] = (byte)(int)(Serial.read());
+    }
+    if(Serial.read() == '3'){
+      Serial.println("TEMPO ENTRE AMOSTRAGENS NOS SENSORES");;
+      while(!Serial.available());
+      pacote_comando[2] = (byte)(int)(Serial.read());
+    }
+    }
+    
+  
+  if(Gateway_Server_BLE->getConnectedCount() <= 0) {
     Serial.println("SEM SENSORES LIGADOS");
     sensor_temp_enviar = false;
     sensor_humd_enviar = false;
@@ -211,6 +254,16 @@ void loop() {
       if (test_speak == 200) {
         Serial.print("humd sucess");
         sensor_humd_enviar = false;
+      }
+    }
+    delay(MAX_TIME_SEND);
+    while (sensor_press_enviar) {
+      Serial.print("pressure tent");
+      test_speak = ThingSpeak.writeField(myChannelnum, 3, value_pressure, MyApiKey);
+      Serial.println(test_speak);
+      if (test_speak == 200) {
+        Serial.print("pressure sucess");
+        sensor_press_enviar = false;
       }
     }
     delay(MAX_TIME_SEND);

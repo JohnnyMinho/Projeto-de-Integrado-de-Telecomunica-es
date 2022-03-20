@@ -11,4 +11,6 @@ char* passwordcasa = "4CSXR6MT";
 char* ssidhotspot = "SinsPhone";
 char* passwordhotspot = "123456789";
 
+
+
 #endif
