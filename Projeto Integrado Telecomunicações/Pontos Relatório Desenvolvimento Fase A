@@ -1,0 +1,22 @@
+Pontos a falar:
+Sistema Sensor:
+Estrutura usada (Conexões, fazer desenho do circuito e secalhar de como o sistema funciona);
+Breve Descrição de como o sistema sensor funciona (Como ele recolhe os dados e quais estes são e como são guardados, como este são processados e enviados para o gateway e como este cria um cliente BLE para funcionar), usamos auxilio de desenhos para isto, falar de como o DHT11 e o BMP280 funcionam e calculam/deduzem a temperatura, humidade e pressão (usar artigos, datasheets e excertos de texto); O dht11 mede a temperatura através de uma termorresistência.
+Descrição da estrutura do programa em si (dados e funções etc);
+Fluxograma do funcionamento do programa sensor.
+
+Gateway:
+Estrutura usada na gateway (mesma coisa que no Sistema Sensor);
+Breve Descrição de como o Gateway funciona (Como ele recebe os dados, como inicia o servidor BLE, como este processa os dados recebidos, etc);
+Descrição da estrutura do programa em si(dados e funções);
+Fluxograma do funcionamento do programa sensor.
+
+Global:
+Estrutura global (Só um desenho do sensor todo) / Descrição global do funcionamento;
+Fluxograma e imagens quase que totalemente direcionadas à interação entre os dois componente
+
+Testagem:
+Imagens do ThingSpeak e dos Serial Monitors
+Apontar Defeitos/Limitições do programa (Ex: Como o envio de dados para o ThingSpeak Demora +/- 1 segundo, caso seja bem sucedida na 1ªtentativa, o tempo entre o envio dos dados para o ThingSpeak nunca vai ser exatamente de 20 segundos entre os dados ou de 1 minuto caso para o envio de um novo valor do mesmo tipo de dados / O Gateway continua a enviar os dados e só notifica da desconexão de todos os sistemas sensores após o fim do envio de todos os tipos de dados / O Gateway só notifica da introdução de um comando na mesma situação que a notificação da disconexão de todos os sensores (provavelmente consigo retirar este defeito);
+
+

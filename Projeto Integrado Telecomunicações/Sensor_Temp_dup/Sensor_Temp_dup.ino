@@ -1,14 +1,17 @@
-
 #include <SPI.h>;
 #include <printf.h>;
 #include <math.h>;
 #include "DHT.h";
+#include <chrono>;
+#include <ctime>;
 #include <Wire.h>;
+#include <WiFi.h>;
 #include <Adafruit_BMP280.h>;
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <stdio.h>
 #include <BLEServer.h>
+#include "INTINFO.h"
 
 #define Sensor_Name "Gateway_Sensor"
 #define BMP_MOSI (21)//pin do SDA/SDI (Pin D21)
@@ -18,7 +21,7 @@
 
 #define DHTPIN 17 //Define o pino a que o DHT vai transmitir os dados na placa ESP32, neste caso é o RX logo é o pin 40
 #define TIPODHT DHT11 //Define o tipo de DHT usado neste caso o DHT11
-#define Tempo_Amostra 2000 //Define o tempo máximo entre a recolha de amostras 
+#define Tempo_Amostra 1000 //Define o tempo máximo entre a recolha de amostras 
 
 boolean doConnect = false;
 boolean IMConnected = false;
@@ -26,8 +29,16 @@ boolean Scan_BLE = false;
 boolean temperatura_nova = false;
 boolean humidade_nova = false;
 boolean pressure_nova = false;
+boolean send_new = false; //Para permitir que apenas uma amostra seja enviada, usamos esta variável
 boolean lock = false;
+boolean valid_status = false; //Esta variável serve para confirmar que todos os dados dos sensores são válidos
+boolean WiFi_Connected = false;
 unsigned status_bmp;
+unsigned long time_start = 0; //timer para apresentar dados
+unsigned long time_start_send = 0; // timer para enviar para o gateway
+String toSend_Temp;
+String toSend_Humd;
+String toSend_Press;
 static BLEUUID UUID_SERVER_SERVICE("72add083-b931-4efc-ba71-4eaf935e0465");
 static BLEUUID UUID_Characteristic_Server("cf15383a-afe7-4d44-b24d-a6363e93793e"); 
 static BLEUUID UUID_TEMP_CHARACTERISTIC("eea1aa7d-b9b9-4ddf-a575-05b7a37b139c");
@@ -35,17 +46,27 @@ static BLEUUID UUID_HUMD_CHARACTERISTIC("9d9031b5-191f-4e2d-9791-1c2240e74a8d");
 static BLEUUID UUID_PRESS_CHARACTERISTIC ("01bcb788-7258-43b3-be93-f35dad0ac2f4");
 static BLERemoteCharacteristic* Remote_Humd_Characteristic;
 static BLERemoteCharacteristic* Remote_Temp_Characteristic;
-static BLERemoteCharacteristic* Remote_Temp_Humd_Characteristic;
+static BLERemoteCharacteristic* Remote_Temp_SERVER;
 static BLERemoteCharacteristic* Remote_Press_Characteristic;
 static BLEAdvertisedDevice* Gateway_Usado; //Servidor Basicamente
 char pacote[6];
-byte pacote_comando[2]; //TRAMA DE COMANDO, 1 Byte Header, 1 Byte Dados
+/*byte pacote_comando[2]; //TRAMA DE COMANDO, 1 Byte Header, 1 Byte Dados
 byte byteSTOP = 0b00010000; //A trama de comando deve indicar o tempo pelo qual o sistema sensor deve desligar, caso seja 0 , desliga indifinitivamente
 byte byteSTART = 0b00010010;
-byte byteCHANGETIME = 0b00010100;
+byte byteCHANGETIME = 0b00010100;*/
 char* Temp_Data;
 char* Humd_Data;
 char* Pressure_Data;
+
+/* Variáveis WIFI*/
+char* ssid = ssidhotspot;
+char* password = passwordhotspot;
+
+WiFiClient cliente_internet;
+const char* ntpServer = "pool.ntp.org";// Para obter a data e  tempo usamos um server que nos dá estes dados automáticamente
+const long gmtOffset_sec = 0; //Offset da zona temporal, como estamos em Portugal, o valor é de 0
+const int daylightOffset_sec = 0; //Tem a haver com o horário de inverno / verão
+
 
 DHT dht(DHTPIN, TIPODHT);
 Adafruit_BMP280 bmp;
@@ -69,25 +90,7 @@ class MyClientCallback : public BLEClientCallbacks{
     IMConnected = false;
   }
   void onWrite(BLECharacteristic *pCharacteristic, BLEDevice *pDevice){
-    if ((pCharacteristic->getUUID().equals(UUID_Characteristic_Server))) {
-        std::string value = pCharacteristic->getValue();
-        for(int i = 0; value.length(); i++){
-          pacote[i] = (byte)value[i]; 
-        }
-        if(pacote[0] == byteSTOP){
-          pDevice->deinit(true);
-          IMConnected = false;
-          doConnect  = true;
-          lock = true;
-        }
-        else if(pacote[0] == byteSTART){
-          lock = false;
-          initBLE();
-        }
-        else if(pacote[0] == byteCHANGETIME){
-          
-        }
-      }
+    
   }
 };
 
@@ -99,19 +102,45 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks
     Serial.print("BLE Advertised Device found: ");
     Serial.println(advertisedDevice.toString().c_str());
 
-    /* We have found a device, let us now see if it contains the service we are looking for. */
+    /* Foi encontrado um cliente, mas é necessário verificar se este têm o servico correto, neste caso o UUID_SERVER_SERVICE */
     if (advertisedDevice.haveServiceUUID() && advertisedDevice.isAdvertisingService(UUID_SERVER_SERVICE))
     {
       BLEDevice::getScan()->stop();
       Gateway_Usado = new BLEAdvertisedDevice(advertisedDevice);
       doConnect = true;
       Scan_BLE = true;
+      temperatura_nova = false;
+      humidade_nova = false;
+      pressure_nova = false;
+      send_new = false;
+      time_start = 0;
+      time_start_send = 0;
+      valid_status = 0;
     }
   }
 };
 
+static void notifyCallBack_SERVER(BLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify){
+     char *value= (char*)pData;
+       for(int i = 0; i<length; i++){
+          Serial.print(value[i]);
+        }
+        Serial.println(value);
+        if(value[0] == 'N'){
+          
+          //IMConnected = false;
+          //doConnect  = true;
+          lock = true;
+        }
+        else if(value[0] == 'Y'){
+          lock = false;
+          //initBLE();
+        }
+      }
+
+
 static void notifyCallBack_TEMP(BLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify){
-  
+
 }
 
 static void notifyCallBack_HUMD(BLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify){
@@ -119,7 +148,8 @@ static void notifyCallBack_HUMD(BLERemoteCharacteristic* pBLERemoteCharacteristi
 }
 
 static void notifyCallBack_PRESSURE(BLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify){
-  
+ 
+       
 }
 
 
@@ -140,7 +170,7 @@ bool conectar_servidor(){ //Criamos um cliente e conectamos ao servidor
     return false;
   }
   
-  Remote_Temp_Humd_Characteristic = Temp_Servico -> getCharacteristic(UUID_Characteristic_Server); //Obtemos as caracteristicas do Gateway e seguidamente verificamos se as mesmas são válidas 
+  Remote_Temp_SERVER = Temp_Servico -> getCharacteristic(UUID_Characteristic_Server); //Obtemos as caracteristicas do Gateway e seguidamente verificamos se as mesmas são válidas 
 
   Remote_Humd_Characteristic = Temp_Servico -> getCharacteristic(UUID_HUMD_CHARACTERISTIC);
 
@@ -148,7 +178,7 @@ bool conectar_servidor(){ //Criamos um cliente e conectamos ao servidor
 
   Remote_Press_Characteristic = Temp_Servico -> getCharacteristic(UUID_PRESS_CHARACTERISTIC);
   
-  if(Remote_Temp_Humd_Characteristic == nullptr){ //Só verificamos os casos em que falhou já que se tudo correr bem, não é necessário uma alteração do progresso
+  if(Remote_Temp_SERVER == nullptr){ //Só verificamos os casos em que falhou já que se tudo correr bem, não é necessário uma alteração do progresso
     SENSORES->disconnect();
     Serial.println("Characteristic Error");
     return false;
@@ -169,8 +199,8 @@ bool conectar_servidor(){ //Criamos um cliente e conectamos ao servidor
     return false;
   }
   
-  if(Remote_Temp_Humd_Characteristic->canRead(),Remote_Humd_Characteristic->canRead(),Remote_Temp_Characteristic->canRead(),Remote_Press_Characteristic->canRead()){
-    std::string mostrar = Remote_Temp_Humd_Characteristic->readValue();
+  if(Remote_Temp_SERVER->canRead(),Remote_Humd_Characteristic->canRead(),Remote_Temp_Characteristic->canRead(),Remote_Press_Characteristic->canRead()){
+    std::string mostrar = Remote_Temp_SERVER->readValue();
     std::string mostrar2 = Remote_Temp_Characteristic->readValue();
     std::string mostrar3 = Remote_Humd_Characteristic->readValue();
     std::string mostrar4 = Remote_Press_Characteristic->readValue();
@@ -180,8 +210,8 @@ bool conectar_servidor(){ //Criamos um cliente e conectamos ao servidor
     Serial.println(mostrar4.c_str());
   }
 
-  if(Remote_Temp_Humd_Characteristic->canNotify()){
-    Remote_Temp_Humd_Characteristic->registerForNotify(notifyCallBack_TEMP);
+  if(Remote_Temp_SERVER->canNotify()){
+    Remote_Temp_SERVER->registerForNotify(notifyCallBack_SERVER);
   }
   if(Remote_Humd_Characteristic->canNotify()){
     Remote_Humd_Characteristic->registerForNotify(notifyCallBack_HUMD);
@@ -220,7 +250,7 @@ void initBLE(){
   if(status_bmp){
   bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,     /* Operating Mode. */
                   Adafruit_BMP280::SAMPLING_X2,     /* Temp. oversampling */
-                  Adafruit_BMP280::SAMPLING_X16,    /* Pressure oversampling */
+                  Adafruit_BMP280::SAMPLING_X16,    /* Pressure oversampling, basicamente aumentamos o consumo de energia de modo a reduzir o ruido */
                   Adafruit_BMP280::FILTER_X16,      /* Filtering. */
                   Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
   }
@@ -232,12 +262,46 @@ void initBLE(){
   }
 }
 
+void make_timestamp() { //Faz um timestamp através do servidor NTP, 
+  struct tm timestamp; //tm é uma struct que guarda os tempos em ints consoante o tipo (anos, meses, dias, etc)
+  while(!getLocalTime(&timestamp)){
+    //Serial.println("Failed to obtain time");
+    //return;
+  }
+  Serial.print(&timestamp, "%H:%M:%S");
+}
+
 void setup() {
   Serial.begin(115200);
+  WiFi.begin(ssid, password);
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  WiFi.mode(WIFI_STA);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    WiFi.begin(ssid, password);
+    delay(4000);
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    WiFi_Connected = true;
+  }
   initBLE();
 }
 
+/*void get_data(unsigned long timer_receb){
+  if(timer_receb-millis() >= 1000){
+  humd = dht.readHumidity();
+  temp = dht.readTemperature();
+  pressure = (bmp.readPressure()/100);
+  if(isnan(temp) || isnan(humd) || isnan(pressure)){
+      Serial.println("Failed to read temperature or humidity");
+    }
+  String toSend_Temp = (String(temp));
+  String toSend_Humd = (String(humd));
+  String toSend_Press = (String(pressure));
+  }
+}*/
 
+//void wait
 
 void loop(){
   //String toSend_Humd;
@@ -255,35 +319,51 @@ void loop(){
  if(IMConnected){
     //sensors_event_t pressure_event;
     //bmp_pressure->getEvent(&pressure_event);
-    int t = 0;
-    int h = 0;
+    
+    if(millis()-time_start >= 1000){
     humd = dht.readHumidity();
     temp = dht.readTemperature();
     pressure = (bmp.readPressure()/100);
     if(isnan(temp) || isnan(humd) || isnan(pressure)){
-      Serial.println("Failed to read temperature or humidity");
+      valid_status = false;
     }
     else{
+      valid_status = true;
+    }
+    time_start = millis();
+    }
+    if(!valid_status){
+      //Serial.println("Failed to read temperature or humidity or pressure");
+    }
+    else{
+       String toSend_Temp = (String(temp));
+       String toSend_Humd = (String(humd));
+       String toSend_Press = (String(pressure));
+       make_timestamp();
+       Serial.print(" -> Temperatura: ");
+       Serial.println(toSend_Temp);
+       make_timestamp();
+       Serial.print(" -> Humd: ");
+       Serial.println(toSend_Humd);
+       make_timestamp();
+       Serial.print(" -> Presão atmosférica: ");
+       Serial.println(toSend_Press);
+      valid_status = false;
+      //getdata();
+      if(!temperatura_nova && !humidade_nova && !pressure_nova){
       temperatura_nova = true;
       humidade_nova = true;
       pressure_nova = true;
+      }
       //Serial.println(temp);
       //Serial.println(humd);
-      
-     String toSend_Temp = (String(temp));
-      
-      String toSend_Humd = (String(humd));
-
-      String toSend_Press = (String(pressure));
+       
+     
       
       //String toSend_data = (toSend_Temp + " " + toSend_Humd);
-      Serial.print("Temperatura: ");
-      Serial.println(toSend_Temp);
-      Serial.print("Humd: ");
-      Serial.println(toSend_Humd);
-      Serial.print("Presão atmosférica: ");
-      Serial.println(toSend_Press);
-      if(temperatura_nova){
+      if((millis()-time_start_send)>=20000){
+      send_new = true;
+      if(temperatura_nova && send_new){
         pacote[0] = toSend_Temp[0];    
         pacote[1] = toSend_Temp[1];
         pacote[2] = toSend_Temp[2];
@@ -293,9 +373,11 @@ void loop(){
         pacote[6] = '\0';
         Remote_Temp_Characteristic->writeValue(pacote, 6);
         temperatura_nova = false;
+        send_new = false;
       }      
-      delay(Tempo_Amostra);
-       if(humidade_nova){
+      //delay(Tempo_Amostra);
+       if(humidade_nova && send_new){
+        make_timestamp();
         pacote[0] = toSend_Humd[0];    
         pacote[1] = toSend_Humd[1];
         pacote[2] = toSend_Humd[2];
@@ -305,9 +387,11 @@ void loop(){
         pacote[6] = '\0';
         Remote_Humd_Characteristic->writeValue(pacote, 6);
         humidade_nova = false;
+        send_new = false;
       }
-      delay(Tempo_Amostra);
-      if(pressure_nova){
+      //delay(Tempo_Amostra);
+      if(pressure_nova && send_new){
+        make_timestamp();
         pacote[0] = toSend_Press[0];    
         pacote[1] = toSend_Press[1];
         pacote[2] = toSend_Press[2];
@@ -317,11 +401,14 @@ void loop(){
         pacote[6] = '\0';
         Remote_Press_Characteristic->writeValue(pacote, 6);
         pressure_nova = false;
+        send_new = false;
       }
-      delay(Tempo_Amostra);
-   // Remote_Temp_Humd_Characteristic->writeValue(toSend_Temp.c_str(), toSend_Temp.length());
+      time_start_send = millis();
+      //delay(Tempo_Amostra);
+      }
+   // Remote_Temp_SERVER->writeValue(toSend_Temp.c_str(), toSend_Temp.length());
    // Remote_Humd_Characteristic->writeValue(toSend_Humd.c_str(), toSend_Humd.length());
-    //Remote_Temp_Humd_Characteristic->writeValue(toSend_data.c_str(), toSend_data.length());
+    //Remote_Temp_SERVER->writeValue(toSend_data.c_str(), toSend_data.length());
     }
   } 
   else if(Scan_BLE){
