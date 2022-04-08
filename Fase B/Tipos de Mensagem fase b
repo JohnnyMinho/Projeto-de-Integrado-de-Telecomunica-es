@@ -1,0 +1,21 @@
+Tipos de Mensangem
+
+DATA - É enviada por um gateway ou sistema simulado para o sistema central, contendo nela os valores dos dados recolhidos, indicando na mesma a hora a que foram recolhidas.
+	A mensagem tem os seus campos definidos de acordo com o apresentado na figura (numero da figura).
+	
+
+ERROR - É enviada por um gateway ou sistema simulado para o sistema central, caso exista algum erro durante o seu funcionamento.
+	A mensagem tem os seus campos definidos de acordo com o apresentado na figura (numero da figura).
+
+START - É enviada por um gateway ou sistema simulado para o sistema central, indicando que estão prontos a enviar dados para o mesmo, indicando nelas o local onde as amostras iram ser recolhidas.
+	A mensagem tem os seus campos definidos de acordo com o apresentado na figura (numero da figura).
+
+STOP - É enviada por um gateway ou sistema simulado para o sistema central, indicando que estes já não possuem mais dados para enviar para o sistema central e que pretendem dar um termino à sessão TCP.
+	A mensagem tem os seus campos definidos de acordo com o apresentado na figura (numero da figura).
+
+END - É enviada do sistema central para  um gateway ou sistema simulado, indicando que o sistema central não pretende continuar a receber dados do mesmo.
+	A mensagem tem os seus campos definidos de acordo com o apresentado na figura (numero da figura).
+	
+BEGIN - É enviada do sistema central para um gateway ou sistema simulado, indicando que o sistema central está dispoto a iniciar a receção de dados.
+	A mensagem tem os seus campos definidos de acordo com o apresentado na figura (numero da figura).
+	

@@ -1,0 +1,141 @@
+Fundamentos:
+Todos os que estavam vão se manter
+
+Falar de Sockets (falta) , TCP/IP, Fundamentos de Bases de Dados (csv)(catarina)
+Sistema Central ( feito= 
+Sistema Sensor Simulado ( feito)
+
+Tecnologias usadas
+Mudanças
+Hardware
+
+Os principais componentes e tecnologias que serão usados neste projeto estão aqui
+descritas:
+
+ESP32-DEVKITC V4: Também conhecido por ESP32, é uma placa que alicerça no
+microcontrolador ESP32 e pode ser programada com base nas línguas C e C++
+(podendo também ser programado através de outros meios). Esta placa para além
+de ser uma placa de baixo consumo, também suporta ligações Wi-Fi, Bluetooth e
+BLE. [9]
+Tem múltiplos modos de funcionamento:
+- Active Mode
+- Modem Sleep
+- Light Sleep
+- Deep Sleep
+- Hibernation Mode
+
+DHT11 - Sensor de Temperatura e Humidade: contém um sensor que consegue ler a
+temperatura e a humidade do meio onde se encontra, sendo que depois
+transmite o resultado do que foi lido. Os dados lidos são enviados por um
+microcontrolador de 8 bits que disponibiliza os dados da temperatura e humidade.
+O sensor também contém uma resistência embutida, o que facilita a
+realização dos testes. [8] A figura abaixo representa à esquerda, DTH11 e
+respetivo pin-out usado e à direita, DHT11 na sua forma base e respetivo pin-out.
+
+BMP 280 -Sensor de Pressão Atmosférica: O BMP 280 é um sensor de temperatura e
+pressão atmosférica. Devido à alta precisão e linearidade do sensor é possível
+descobrir a altitude do meio de onde se encontra com uma margem de erro de ± 1
+metro. Como o sensor é de pequena dimensão, baixo custo e baixo consumo de
+energia, acaba por ser uma mais-valia para nós em termos monetários e práticos.
+Eventualmente poderemos utilizá-lo para a previsão do tempo. [2] [4] A figura
+abaixo representa o BMP 280 e os seus respetivos pin-outs (É de necessário referir que este sensor é capaz usar as interface I2C e ISP. Por razões de compatibilidade com os restantes sensores, a interface ISP é a interface usada).
+
+Fios elétricos e Cabos USB (Universal Serial Bus) :  Tendo em conta a
+necessidade de ligações físicas entre os diversos componentes usados neste
+projeto, principalmente entre as placas ESP32 os sensores e as placas ESP32 e os
+PCs (Personal Computers), foi necessário o uso de fios elétricos, sendo a maioria
+dos fios utilizados nesta fase fios jumper fêmea-fêmea.
+	Quanto aos cabos USB (Universal Serial Bus), os que foram usados foram fios
+genéricos (do tipo micro-usb) com capacidade de transferência de dados, visto
+que existe cabos USB que apenas fornecem energia. As figuras mostram exemplos
+dos fios usados para a realização do projeto. 
+
+Breadboards: Como este projeto requer o uso diversos componentes eletrónicos,
+achamos que é benéfico o uso de breadboards, dada a facilidade da interligação
+destes componentes quando colocados nas mesmas já que desta maneira é
+eliminada a necessidade de os componentes serem soldados numa placa PCB ou
+destes poderem sofrer danos por se encontrarem ligados por fios soltos sem um
+suporte firme, o que é possível pelo facto das breadboards possuírem contactos
+metálicos no seu interior. Contudo este benefício também pode ser uma
+desvantagem caso existam maus contactos entre a placa metálica e os
+componentes.
+
+Computador Pessoal: Como este projeto se baseia em grande parte no uso da
+programação, podemos dizer que o computador individual de cada elemento é
+uma peça central deste projeto.
+	Este toma uma figura de relevo maior a partir desta fase dado o facto de que todos os elementos do sistema central estarão sediados numa destas máquinas.
+
+Software
+Mudanças
+
+Arduíno IDE - IDE (Interface Development Enviroment): Este é um software
+gratuito usado para programar placas de circuito Arduíno. Tem uma linguagem
+de programação única para garantir que todos os produtos hardware associados
+podem ser programados da mesma maneira. Será o software escolhido pela
+equipa, aconselhado pelo docente da U.C.
+
+Gantt Project - Planeamento temporal do Projeto: Sabendo que este trabalho terá
+uma duração longa, comparado a projetos previamente realizados noutras UCs, é
+necessário um bom planeamento temporal e uma boa distribuição das tarefas pelos
+respetivos elementos do grupo, e é por isso que utilizamos este software gratuito
+para nos ajudar nesta etapa fundamental do projeto.
+
+GitHub - Organização e armazenamento do trabalho: Dado o elevado volume de
+ficheiros que é necessário trocar e atualizar constantemente entre os elementos do
+grupo, consideramos necessária a utilização de um repositório no GitHub, o qual
+pode ser visto como uma espécie de rede social entre programadores, visto que
+permite a partilha de códigos em diversas linguagens permitindo assim a
+cooperação de múltiplos programadores em projetos sem a necessidade de
+contacto físico ou acesso à mesma intranet. Com isto podemos dizer que esta
+ferramenta vai ter um uso extensivo ao longo deste fase e do restante projeto.
+
+Visual Studio Code: É um dos IDEs que iremos usar para desenvolver código.
+Escolhemos este IDE como um dos que iremos utilizar dado o facto de este ser
+extremamente user-friendly e configurável consoante as necessidades que o nosso
+grupo poderá ter ao longo desta fase. Apesar de suportar diversas linguagens, este
+será maioritariamente usado para o desenvolvimento o website usado para a representaçã online dos dados, o qual será maiorioritariamente programado através das linguagens HTML e JavaScript.
+
+JetBrains IntelliJ IDEA(itálico): Outro IDE que iremos utilizar para o desenvolvimento
+de código, mais especificamente código na linguagem Java. Esta escolha baseia-
+se principalmente na experiência positiva do mesmo em projetos de outras UCs,
+mas também na opinião de outros colegas, pelo que achamos que é especialmente
+indicado para o desenvolvimento do código Java dedicado a esta fase. [14]
+Microsoft Office Word: Sabido o poder e a facilidade de uso do Microsoft Office
+Word como um editor de texto, este foi o programa escolhido como suporte de
+escrita para esta fase. Contudo poderá vir a ser substituído pelo uso da linguagem
+Latex através do website Overleaf.
+
+Discord: é uma ferramenta focada em comunicação por voz e texto que permite a
+criação de canais de voz, servidores, chamada em vídeo, jogos e também é
+possível a instalação de bots. Esta plataforma serviu como um meio de
+comunicação para a equipa, e permitiu-nos trabalhar enquanto nos comunicamos
+via chamada de voz, o que facilitou bastante a interação entre os membros da
+equipa da equipa.
+
+PhotoShop (Itálico): 
+
+Apache NetBeans(Itálico):
+
+ThingSpeak (Eliminado).
+
+Photoshop (Adição)- 
+
+Apache Netbeans(Adição)-
+
+
+Linguagens
+
+Linguagem C: Visto que a programação do próprio IDE do Arduino é realizada
+apenas em C, os elementos do grupo vão precisar de ter os conhecimentos gerais
+de programação na Linguagem C, já que uma parte essencial do projeto depende
+da mesma. Contudo como o grupo já fez alguns projetos em C, acreditamos que
+estas noções estão suficientemente interiorizadas para a realização deste projeto.
+
+Linguagem Java: Com a ajuda da Unidade Curricular de Programação Orientada
+a Objetos, temos a perceção de como podemos utilizar a Linguagem Java para
+nosso benefício para a execução do projeto. O facto de esta ter um vasto número de bibliotecas deixa-nos escolher qual opção mais propícia à solução dos objetivos e problemas desta fase.
+
+-PHP(Adição)(Sins) - Existindo a necessidade da criação de um Web Server(Itálico) nesta fase, a linguagem PHP (Hypertext Preprocessor) vai ser usada de modo a faciliar a dinâmica servidor-cliente, dado que um dos objetivo da lingua é facilitar as respostas HTTP e aumentar interativade dos websites(itálico) que possuem esta linguagem na sua constitução.
+
+-JavaScript(Adição)(Godinho).
+-HTML & CSS(Adição)(Godinho).
