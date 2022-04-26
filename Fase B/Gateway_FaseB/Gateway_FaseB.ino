@@ -28,8 +28,8 @@ BLECharacteristic *Gateway_Characteristic_PRESS;
 // Variáveis ligadas à WiFi
 
 
-char* ssid = ssidlab2;
-char* password = passwordlab2;
+char* ssid = ssidhotspot;
+char* password = passwordhotspot;
 
 
 WiFiClient cliente_internet;
@@ -40,7 +40,7 @@ const char *MyApiKey = "DZCFYQTOXYIUTK2J"; // Substituir por chave do canal do t
 
 const char* ntpServer = "pool.ntp.org";// Para obter a data e  tempo usamos um server que nos dá estes dados automáticamente
 const long gmtOffset_sec = 0; //Offset da zona temporal, como estamos em Portugal, o valor é de 0
-const int daylightOffset_sec = 0; //Tem a haver com o horário de inverno / verão
+const int daylightOffset_sec = 3600; //Tem a haver com o horário de inverno / verão
 
 unsigned long timer_delay = 0;
 // -------------------------------
@@ -48,7 +48,6 @@ unsigned long timer_delay = 0;
 //Variáveis gerais
 String MSG_STOP = "STOP"; //Como o BLE facilita o envio de Strings , usamos uma String como meio de fazer STOP ou START dos sensores
 String MSG_START = "START";
-String MSG_CHANGETIME = "DELAY";
 
 boolean deviceConnected = false;
 boolean sensor_temp_enviar = false;
@@ -58,17 +57,25 @@ boolean caracteristica_pressure = false;
 boolean caracteristica_temp = false;
 boolean caracteristica_humd = false;
 boolean WiFi_Connected = false;
-char value_temp[6];
-char value_humd[6];
-char value_pressure[6];
+boolean TCP_Stay_Connected = false;
+boolean time_configure_sent = false;
+unsigned long current_epoch;
+/*char value_temp[6];
+  char value_humd[6];
+  char value_pressure[6];*/
+char value_pacote[18];
+byte current_timestamp_HMS[9];
+uint8_t pacote_dados[27];
+uint8_t pacote_auth[16];
 byte pacote_comando[2];
-float temp;
-float humd;
-float pressure;
-float humd_send;
-float temp_send;
-float pressure_send;
+/*float temp;
+  float humd;
+  float pressure;
+  float humd_send;
+  float temp_send;
+  float pressure_send;*/
 int test_speak = 0;
+WiFiClient client;
 
 //-------------------------------
 void make_timestamp();
@@ -78,7 +85,7 @@ class MyServerCallbacks: public BLEServerCallbacks {
       deviceConnected = true;
     }
     void onDisconnect(BLEServer* pServer) {
-
+      time_configure_sent = false;
     }
 };
 
@@ -87,18 +94,6 @@ class MyCallbacks: public BLECharacteristicCallbacks
     void onConnect(BLEServer* pServer) {
       Serial.println("Device Connected");
       deviceConnected = true;
-      struct tm timestamp;
-      while (!getLocalTime(&timestamp)) {
-        Serial.println("Failed to obtain time");
-      }
-      char time_sync[8] = {'T',timestamp.tm_hour};
-      char time_syncmin[] = {timestamp.tm_min};
-      char time_syncsec[] = {timestamp.tm_sec};
-      strcat(time_sync,time_syncmin);
-      strcat(time_sync,time_syncsec);
-      time_sync[8] = '\0';
-      Gateway_Received_Charac->setValue(time_sync);
-      Gateway_Received_Charac->notify();
     }
     void onDisconnect(BLEServer* pServer) {
 
@@ -106,59 +101,33 @@ class MyCallbacks: public BLECharacteristicCallbacks
     void onWrite(BLECharacteristic *pCharacteristic)
     {
       std::string value;
-      if ((pCharacteristic->getUUID().equals(UUID_TEMP_CHARACTERISTIC)) && !caracteristica_temp) {
+      if ((pCharacteristic->getUUID().equals(UUID_TEMP_CHARACTERISTIC))) {
         caracteristica_temp = true;
         value = pCharacteristic->getValue();
-      }
-      if ((pCharacteristic->getUUID().equals(UUID_HUMD_CHARACTERISTIC)) && !caracteristica_humd) {
-        caracteristica_humd = true;
-        value = pCharacteristic->getValue();
-      }
-      if ((pCharacteristic->getUUID().equals(UUID_PRESS_CHARACTERISTIC)) && !caracteristica_pressure) {
-        caracteristica_pressure = true;
-        value = pCharacteristic->getValue();
+        Serial.println("HELLO");
       }
       if (value.length() > 0)
       {
+        memcpy(pacote_dados, &DATAbyte,sizeof(DATAbyte));
         for (int i = 0; i < value.length(); i++)
         {
           if (caracteristica_temp) {
-            value_temp[i] = value[i];
+            pacote_dados[i + 9] = value[i];
+            if (value[i] == NULL) {
+              pacote_dados[i + 9] = 30;
+            }
+            Serial.println(value[i]);
             sensor_temp_enviar = true;
           }
-          if (caracteristica_humd) {
-            value_humd[i] = value[i];
-            sensor_humd_enviar = true;
-          }
-          if (caracteristica_pressure) {
-            value_pressure[i] = value[i];
-            sensor_press_enviar = true;
-          }
         }
-        value_temp[5] = '\0';
-        value_humd[5] = '\0';
-        value_pressure[5] = '\0';
+        pacote_dados[27] = '\0';
         if ((sensor_temp_enviar)) {
-          temp_send = atof(value_temp);
+          //temp_send = atof(value_temp);
           make_timestamp();
-          Serial.print(" Temperatura Recebida: ");
-          Serial.println(temp_send);
-        }
-        if ((sensor_humd_enviar)) {
-          humd_send = atof(value_humd);
-          make_timestamp();
-          Serial.print(" Humidade Recebida: ");
-          Serial.println(humd_send);
-        }
-        if ((sensor_press_enviar)) {
-          pressure_send = atof(value_pressure);
-          make_timestamp();
-          Serial.print(" Pressão Recebida: ");
-          Serial.println(pressure_send);
+
+          Serial.print(" -> Dados Recebidos por BLE");
         }
         caracteristica_temp = false;
-        caracteristica_humd = false;
-        caracteristica_pressure = false;
       }
     }
 };
@@ -182,18 +151,49 @@ void check_input() {
       Gateway_Received_Charac->setValue(temp2);
       Gateway_Received_Charac->notify();
     }
-    if (temp == '3') {
-      Serial.println("TEMPO ENTRE AMOSTRAGENS NOS SENSORES");
-    }
   }
 }
 
+boolean connectTCP() {
+  if (!client.connect(host, port)) {
+    Serial.println("connection failed");
+  } else {
+    TCP_Stay_Connected = true;
+  }
+}
+
+void send_time_sensor() {
+  struct tm timestamp;
+  while (!getLocalTime(&timestamp)) {
+    Serial.println("Failed to obtain time");
+  }
+  byte time_sync_send[8];
+  char time_sync[8] = {'T'};
+  sprintf(time_sync + 1, "%d", timestamp.tm_hour);
+  sprintf(time_sync + 3, "%d", timestamp.tm_min);
+  sprintf(time_sync + 5, "%d", timestamp.tm_sec);
+  Serial.println(timestamp.tm_min);
+  time_sync[8] = '\0';
+  for (int i = 0; i < sizeof(time_sync) ; i++) {
+    time_sync_send[i] = time_sync[i];
+    Serial.print(time_sync[i]);
+  }
+  String time_test = time_sync;
+  Serial.println(time_test);
+  time_sync_send[8] = '\0';
+  Gateway_Received_Charac->setValue(time_sync_send, 8);
+  Gateway_Received_Charac->notify();
+}
+
 void make_timestamp() { //Faz um timestamp através do servidor NTP,
+  time_t now;
   struct tm timestamp; //tm é uma struct que guarda os tempos em ints consoante o tipo (anos, meses, dias, etc)
   while (!getLocalTime(&timestamp)) {
     Serial.println("Failed to obtain time");
-    return;
   }
+  strftime(time_stamp_HMS, sizeof(time_stamp_HMS), "%H:%M:%S", &timestamp);
+  memmove(pacote_dados + 1, time_stamp_HMS, 8);
+  time(&now);
   Serial.print(&timestamp, "%H:%M:%S");
 }
 
@@ -239,74 +239,51 @@ void setup() {
   WiFi.mode(WIFI_STA);
 
   while (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Attempting connecting to ThingSpeak");
+    Serial.println("Failed to connnect to network");
     WiFi.begin(ssid, password);
-    delay(4000);
+    delay(5000);
   }
   if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
     WiFi_Connected = true;
   }
-  ThingSpeak.begin(cliente_internet);
-  Serial.println("Conected to ThingSpeak");
-
+  boolean TCPConnection = connectTCP();
+    if (!TCPConnection) {
+    return;
+    }
 }
 
 void loop() {
   String toSend;
   int i;
-  check_input();
-  if (Gateway_Server_BLE->getConnectedCount() <= 0) {
-    Serial.println("SEM SENSORES LIGADOS");
-    sensor_temp_enviar = false;
-    sensor_humd_enviar = false;
-    BLEAdvertising *Ad_Servidor = BLEDevice::getAdvertising();
-    Ad_Servidor->addServiceUUID(UUID_SERVER_SERVICE);
-    Ad_Servidor->setScanResponse(true);
-    Ad_Servidor->setMinPreferred(0x12);
-    BLEDevice::startAdvertising();
-    delay(5000);
+  if(TCP_Stay_Connected){
+    
   }
-  else {
-    while (sensor_temp_enviar) {
-      test_speak = ThingSpeak.writeField(myChannelnum, 1, value_temp, MyApiKey);
-      if (test_speak == 200) {
+  while (TCP_Stay_Connected) {
+    check_input();
+    
+    if (Gateway_Server_BLE->getConnectedCount() <= 0) {
+      Serial.println("SEM SENSORES LIGADOS");
+      sensor_temp_enviar = false;
+      BLEAdvertising *Ad_Servidor = BLEDevice::getAdvertising();
+      Ad_Servidor->addServiceUUID(UUID_SERVER_SERVICE);
+      Ad_Servidor->setScanResponse(true);
+      Ad_Servidor->setMinPreferred(0x12);
+      BLEDevice::startAdvertising();
+      delay(1000);
+    }
+    else {
+      if (!time_configure_sent) {
+        send_time_sensor();
+        time_configure_sent = true;
+      }
+      while (sensor_temp_enviar) {
         make_timestamp();
-        timer_delay = millis();
-        Serial.print(" -> Temperatura Enviada: ");
-        Serial.println(value_temp);
+        Serial.print("Dados Enviados");
         sensor_temp_enviar = false;
       }
     }
-    while (millis() - timer_delay < 15000) {
-      check_input();
-    }
-    while (sensor_humd_enviar) {
-      test_speak = ThingSpeak.writeField(myChannelnum, 2, value_humd, MyApiKey);
-      if (test_speak == 200) {
-        timer_delay = millis();
-        make_timestamp();
-        Serial.print(" -> Humidade Enviada: ");
-        Serial.println(value_humd);
-        sensor_humd_enviar = false;
-      }
-    }
-    while (millis() - timer_delay < 15000) {
-      check_input();
-    }
-    while (sensor_press_enviar) {
-      test_speak = ThingSpeak.writeField(myChannelnum, 3, value_pressure, MyApiKey);
-      if (test_speak == 200) {
-        timer_delay = millis();
-        make_timestamp();
-        Serial.print(" -> Pressão atmosférica enviada: ");
-        Serial.println(value_pressure);
-        sensor_press_enviar = false;
-      }
-    }
-    while (millis() - timer_delay < 15000) {
-      check_input();
-    }
   }
-  // put your main code here, to run repeatedly:
-
 }

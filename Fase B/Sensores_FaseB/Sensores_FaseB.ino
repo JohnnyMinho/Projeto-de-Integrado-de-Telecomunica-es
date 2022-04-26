@@ -25,13 +25,12 @@
 boolean doConnect = false;
 boolean IMConnected = false;
 boolean Scan_BLE = false;
-boolean temperatura_nova = false;
-boolean humidade_nova = false;
-boolean pressure_nova = false;
+boolean dados_novos = false;
 boolean send_new = false; //Para permitir que apenas uma amostra seja enviada, usamos esta variável
 boolean lock = false;
 boolean valid_status = false; //Esta variável serve para confirmar que todos os dados dos sensores são válidos
 boolean WiFi_Connected = false;
+boolean time_configured;
 unsigned status_bmp;
 unsigned long time_start = 0; //timer para apresentar dados
 unsigned long time_start_send = 0; // timer para enviar para o gateway
@@ -51,6 +50,7 @@ static BLEAdvertisedDevice* Gateway_Usado; //Servidor Basicamente
 char pacote_temp[6];
 char pacote_humd[6];
 char pacote_press[6];
+char pacote_completo[18];
 /*byte pacote_comando[2]; //TRAMA DE COMANDO, 1 Byte Header, 1 Byte Dados
   byte byteSTOP = 0b00010000; //A trama de comando deve indicar o tempo pelo qual o sistema sensor deve desligar, caso seja 0 , desliga indifinitivamente
   byte byteSTART = 0b00010010;
@@ -104,9 +104,6 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks
         Gateway_Usado = new BLEAdvertisedDevice(advertisedDevice);
         doConnect = true;
         Scan_BLE = true;
-        temperatura_nova = false;
-        humidade_nova = false;
-        pressure_nova = false;
         send_new = false;
         time_start = 0;
         time_start_send = 0;
@@ -131,22 +128,22 @@ static void notifyCallBack_SERVER(BLERemoteCharacteristic* pBLERemoteCharacteris
     lock = false;
     //initBLE();
   }
-  else if(value[0] == 'T'){
+  else if (value[0] == 'T') {
+    Serial.println("CONFIGURATION TIME");
     struct tm timevalue;
     time_t now_time;
-    char hours[2];
-    char minutes[2];
-    char seconds[2];
-    for(int i=0;i<2;i++){
-    hours[i] = value[i+1];
-    minutes[i] = value[i+3];
-    seconds[i] = value[i+5];
+    char int_time[11];
+    long int true_time;
+    int_time[11] = '\0';
+    for (int i = 0; i < 11; i++) {
+      int_time[i] = value[i+1];
     }
-    timevalue.tm_hour = atoi(hours);
-    timevalue.tm_min = atoi(minutes);
-    timevalue.tm_sec = atoi(seconds);
-    time(&now_time);
-    localtime_r(&now_time, &timevalue);
+    true_time = atoi(&int_time);
+    Serial.print(&timevalue, "%H:%M:%S");
+    settimeofday(&timevalue);
+   /* time(&now_time);
+    localtime_r(&now_time, &timevalue);*/
+    time_configured = true;
   }
 }
 
@@ -238,17 +235,6 @@ bool conectar_servidor() { //Criamos um cliente e conectamos ao servidor
   return true;
 }
 
-/*int roundvalue(float x){
-  int y;
-  if(x-(int)x<0.5){
-    y = floor(x);
-  }
-  if(x-(int)x>0.5){
-    y = ceil(x);
-  }
-  return y;
-  }*/
-
 void initBLE() {
   BLEDevice::init(Sensor_Name);
   BLEScan* Scanner_BLE = BLEDevice::getScan();
@@ -275,11 +261,13 @@ void initBLE() {
 }
 
 void make_timestamp() { //Faz um timestamp através do servidor NTP,
+  time_t now;
   struct tm timestamp; //tm é uma struct que guarda os tempos em ints consoante o tipo (anos, meses, dias, etc)
-  while (!getLocalTime(&timestamp)) {
+  /*while (!getLocalTime(&timestamp)) {
     //Serial.println("Failed to obtain time");
     //return;
-  }
+  }*/
+  
   Serial.print(&timestamp, "%H:%M:%S");
 }
 
@@ -287,22 +275,6 @@ void setup() {
   Serial.begin(115200);
   initBLE();
 }
-
-/*void get_data(unsigned long timer_receb){
-  if(timer_receb-millis() >= 1000){
-  humd = dht.readHumidity();
-  temp = dht.readTemperature();
-  pressure = (bmp.readPressure()/100);
-  if(isnan(temp) || isnan(humd) || isnan(pressure)){
-      Serial.println("Failed to read temperature or humidity");
-    }
-  String toSend_Temp = (String(temp));
-  String toSend_Humd = (String(humd));
-  String toSend_Press = (String(pressure));
-  }
-  }*/
-
-//void wait
 
 void loop() {
   //String toSend_Humd;
@@ -317,132 +289,61 @@ void loop() {
       }
       doConnect = false;
     }
-    if (IMConnected) {
+    if (IMConnected && time_configured) {
       //sensors_event_t pressure_event;
       //bmp_pressure->getEvent(&pressure_event);
-
-      if (millis() - time_start >= 1000) {
-        humd = dht.readHumidity();
-        temp = dht.readTemperature();
-        pressure = (bmp.readPressure() / 100);
-        if (isnan(temp) || isnan(humd) || isnan(pressure)) {
-          valid_status = false;
-        }
-        else {
-          valid_status = true;
-        }
-        time_start = millis();
-      }
-      if (!valid_status) {
-        //Serial.println("Failed to read temperature or humidity or pressure");
+     // Serial.println("HELLO");
+      humd = dht.readHumidity();
+      temp = dht.readTemperature();
+      pressure = (bmp.readPressure() / 100);
+      if (isnan(temp) || isnan(humd) || isnan(pressure)) {
+        valid_status = false;
       }
       else {
+        valid_status = true;
+      }
+      time_start = millis();
+      if (!valid_status) {
+        Serial.println("Failed to read temperature or humidity or pressure");
+      }
+      else {
+       // Serial.println("HELLO2");
         String toSend_Temp = (String(temp));
         String toSend_Humd = (String(humd));
         String toSend_Press = (String(pressure));
         make_timestamp();
-        Serial.print(" -> Temperatura: ");
-        Serial.println(toSend_Temp);
-        make_timestamp();
-        Serial.print(" -> Humd: ");
-        Serial.println(toSend_Humd);
-        make_timestamp();
-        Serial.print(" -> Presão atmosférica: ");
-        Serial.println(toSend_Press);
-        valid_status = false;
-        //getdata();
-        if (!temperatura_nova && !humidade_nova && !pressure_nova) {
-          temperatura_nova = true;
-          humidade_nova = true;
-          pressure_nova = true;
-        }
-        //Serial.println(temp);
-        //Serial.println(humd);
-
         
-
-        //String toSend_data = (toSend_Temp + " " + toSend_Humd);
-        if ((millis() - time_start_send) >= 20000) {
-          for(int i = 0; i<6; i++){
-            pacote_temp[i] = toSend_Temp[i];
-            pacote_humd[i] = toSend_Humd[i];
-            pacote_press[i] = toSend_Press[i];
-            pacote_temp[6] = '\0';
-            pacote_humd[6] = '\0';
-            pacote_press[6] = '\0';
-            make_timestamp();
-            Serial.println("Amostra Enviada");
-            Remote_Temp_Characteristic->writeValue(pacote_temp, 6);
-            Remote_Humd_Characteristic->writeValue(pacote_humd, 6);
-            Remote_Press_Characteristic->writeValue(pacote_press,6);
-          }
-         /* if (temperatura_nova && send_new) { //Código antigo
-            pacote[0] = toSend_Temp[0];
-            pacote[1] = toSend_Temp[1];
-            pacote[2] = toSend_Temp[2];
-            pacote[3] = toSend_Temp[3];
-            pacote[4] = toSend_Temp[4];
-            pacote[5] = toSend_Temp[5];
-            pacote[6] = '\0';
-            make_timestamp();
-            Remote_Temp_Characteristic->writeValue(pacote, 6);
-            Serial.println("Temperatura Enviada");
-            temperatura_nova = false;
-            send_new = false;
-          }
-          //delay(Tempo_Amostra);
-          if (humidade_nova && send_new) {
-            make_timestamp();
-            pacote[0] = toSend_Humd[0];
-            pacote[1] = toSend_Humd[1];
-            pacote[2] = toSend_Humd[2];
-            pacote[3] = toSend_Humd[3];
-            pacote[4] = toSend_Humd[4];
-            pacote[5] = toSend_Humd[5];
-            pacote[6] = '\0';
-            Serial.println(" : Humidade Enviada");
-            Remote_Humd_Characteristic->writeValue(pacote, 6);
-            humidade_nova = false;
-            send_new = false;
-          }
-          //delay(Tempo_Amostra);
-          if (pressure_nova && send_new) {
-            make_timestamp();
-            pacote[0] = toSend_Press[0];
-            pacote[1] = toSend_Press[1];
-            pacote[2] = toSend_Press[2];
-            pacote[3] = toSend_Press[3];
-            pacote[4] = toSend_Press[4];
-            pacote[5] = toSend_Press[5];
-            pacote[6] = '\0';
-            Serial.println(" : Pressão Atmosférica Enviada");
-            Remote_Press_Characteristic->writeValue(pacote, 6);
-            pressure_nova = false;
-            send_new = false;
-          }*/
-          time_start_send = millis();
-          //delay(Tempo_Amostra);
+        valid_status = false;
+        if (!dados_novos) {
+          dados_novos = true;
         }
-        // Remote_Temp_SERVER->writeValue(toSend_Temp.c_str(), toSend_Temp.length());
-        // Remote_Humd_Characteristic->writeValue(toSend_Humd.c_str(), toSend_Humd.length());
-        //Remote_Temp_SERVER->writeValue(toSend_data.c_str(), toSend_data.length());
+
+        if ((millis() - time_start_send) >= 1000) {
+          Serial.print(" -> Temperatura: ");
+          Serial.print(toSend_Temp);
+          Serial.print(" ,Humd: ");
+          Serial.print(toSend_Humd);
+          Serial.print(" ,Presão atmosférica: ");
+          Serial.print(toSend_Press);
+          //Serial.println("HELLO3");
+          for (int i = 0; i < 7; i++) {
+            if (i < 5) {
+              pacote_completo[i] = toSend_Temp[i];
+              pacote_completo[i + 5] = toSend_Humd[i];
+            }
+            pacote_completo[i + 10] = toSend_Press[i];
+          }
+          pacote_completo[18] = '\0';
+          //make_timestamp();
+          Serial.println("Amostra Enviada");
+          Remote_Temp_Characteristic->writeValue(pacote_completo, sizeof(pacote_completo));
+          time_start_send = millis();
+        }
+       
       }
     }
-    else if (Scan_BLE) {
-      BLEDevice::getScan() -> start(0);
-    }
   }
-  /*humd = dht.readHumidity();
-    temp = dht.readTemperature();
-    if(isnan(temp) || isnan(humd)){
-    Serial.println("Failed to read temperature or humidity");
-    }
-    else{
-    Serial.print("Nivel de Humidade: ");
-    Serial.print(humd);
-    Serial.println("%");
-    Serial.print("Temperatura: ");
-    Serial.print(temp);
-    Serial.println(" ºC");
-    }*/
+  else if (Scan_BLE) {
+    BLEDevice::getScan() -> start(0);
+  }
 }
