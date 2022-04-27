@@ -7,6 +7,7 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.nio.file.Path;
+import java.sql.*;
 import java.util.Arrays;
 import java.util.Date;
 
@@ -59,6 +60,12 @@ public class Server implements Runnable{
 
     class ClientWorker implements Runnable {
 
+        String url = "jdbc:mysql://localhost:3306/db";
+        String user = "root";
+        String password = "Magalhaes6709#";
+        String sql = "select * tabeladb";
+        String columnLabel = "";
+
         private final Socket sou_client;
         private String quem_sou;
         private int id = 0;
@@ -70,6 +77,7 @@ public class Server implements Runnable{
         private boolean unblocked = false; //Indica que o sistema sensor ainda não está pronto para enviar dados
         private FileWriter outputfile;
         private CSVWriter csv_write;
+
 
         //TIPOS DE HEADER
         final byte STOPbyte = 0b00000001; // Tipo - 1, Timestamp - 8 (2bytes - horas, 2 bytes - minutos, 2 bytes - segundos)
@@ -105,6 +113,21 @@ public class Server implements Runnable{
             }
         }
 
+        private void update_sql_database(String timestamp, String quem_sou, String local, float temp, float humd, float press){
+            try {
+                Connection connection = DriverManager.getConnection(url);
+
+                Statement statement = connection.createStatement();
+
+                ResultSet resultSet = statement.executeQuery(sql);
+
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+
+        }
+
+
         public void setStatus(boolean status) {
             Alive = status;
         }
@@ -117,6 +140,9 @@ public class Server implements Runnable{
             return this.id;
         }
 
+        public void setLocal(String local_d){
+            this.local = local_d;
+        }
         public void setAuthenticated(boolean status){
             this.authenticated = status;
         }
@@ -308,8 +334,15 @@ public class Server implements Runnable{
                                 char[] Press = {(char)arrayreceived[19],(char)arrayreceived[20],(char)arrayreceived[21],(char)arrayreceived[22],(char)arrayreceived[23],(char)arrayreceived[24],(char)arrayreceived[25]};
                                 String time_stamp = String.valueOf(time_received);
                                 String string_temp = String.valueOf(Temp);
+                                //System.out.println(string_temp);
                                 String string_humd = String.valueOf(Humd);
+                                //System.out.println(string_humd);
                                 String string_Press = String.valueOf(Press);
+                                //System.out.println(string_Press);
+                                float temp_send = Float.parseFloat(string_temp);
+                                float humd_send = Float.parseFloat(string_humd);
+                                float press_send = Float.parseFloat(string_Press);
+                                //update_sql_database(time_stamp,quem_sou,local,temp_send,humd_send,press_send);
                                 System.out.println(time_stamp);
                                 String[] data_input ={ time_stamp ,string_temp , string_humd , string_Press + "\n"};
                                 csv_write.writeNext(data_input);
