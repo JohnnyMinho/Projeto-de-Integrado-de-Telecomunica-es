@@ -10,6 +10,10 @@ import java.nio.file.Path;
 import java.sql.*;
 import java.util.Arrays;
 import java.util.Date;
+import java.sql.DriverManager;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.Statement;
 
 public class Server implements Runnable{
 
@@ -69,6 +73,7 @@ public class Server implements Runnable{
         private final Socket sou_client;
         private String quem_sou;
         private int id = 0;
+        private int entrada = 0;
         private String local;
         private final String Password_to_Match;
         private File BaseDados;
@@ -113,20 +118,54 @@ public class Server implements Runnable{
             }
         }
 
-        private void update_sql_database(String timestamp, String quem_sou, String local, float temp, float humd, float press){
-            try {
-                Connection connection = DriverManager.getConnection(url);
+        private void updatesql(int i,String timestamp, String quem_sou, String local2, float temp, float humd, float press){
+            String url = "jdbc:mysql://localhost:3306/tabeladb";
+            String user = "root";
+            String password = "Sins@741";
+            String sql = "select from tabeladb";
+            String columnLabel = "";
+            String putQuery = "INSERT INTO tabeladb(ID,Timestamp,Local,Temperatura,Humidade,Pressão)VALUES(?, ?, ?, ?, ?, ?)";
 
-                Statement statement = connection.createStatement();
-
-                ResultSet resultSet = statement.executeQuery(sql);
-
-            } catch (SQLException e) {
+            try{
+                Class.forName("com.mysql.cj.jdbc.Driver");
+            } catch(ClassNotFoundException e) {
                 e.printStackTrace();
             }
 
-        }
+            try {
 
+//                Connection connection = DriverManager.getConnection( url, user, password);
+
+                //Statement statement = connection.createStatement();
+
+                try(Connection con = DriverManager.getConnection(url, user, password);
+                    Statement statement = con.createStatement();
+                ){
+                    PreparedStatement pstmt = con.prepareStatement(putQuery);
+                    //pstmt.setInt(1,i);
+                    pstmt.setString(1, quem_sou);
+                    pstmt.setString(2, timestamp);
+                    pstmt.setString(3, local);
+                    pstmt.setFloat(4, temp);
+                    pstmt.setFloat(5, humd);
+                    pstmt.setFloat(6, press);
+                    pstmt.execute();
+                    System.out.println("Inserted records into the table...");
+
+                }
+
+            /*ResultSet resultSet = statement.executeQuery(sql);
+                while(resultSet.next()){
+                    String str = "";
+                    for (int i = 1; i <= 6; i++){ //6 é o número de colunas
+                        str += resultSet.getString(i) + "|";
+                    }
+                    System.out.println(str);
+                }*/
+            } catch (Exception e){
+                e.printStackTrace();
+            }
+        }
 
         public void setStatus(boolean status) {
             Alive = status;
@@ -139,7 +178,9 @@ public class Server implements Runnable{
         public int getId(){
             return this.id;
         }
-
+        public void incrementEntrada(){
+            this.entrada = entrada + 1;
+        }
         public void setLocal(String local_d){
             this.local = local_d;
         }
@@ -202,6 +243,7 @@ public class Server implements Runnable{
                     System.out.println("Autenticado");
                     String tmp = new String(client_name_char);
                     String tmp2 = new String(local_sensor);
+                    setLocal(tmp2);
                     authenticated = true;
                     setAuthenticated(authenticated);
                     setHostName(tmp);
@@ -342,8 +384,10 @@ public class Server implements Runnable{
                                 float temp_send = Float.parseFloat(string_temp);
                                 float humd_send = Float.parseFloat(string_humd);
                                 float press_send = Float.parseFloat(string_Press);
-                                //update_sql_database(time_stamp,quem_sou,local,temp_send,humd_send,press_send);
+                                int i = 1;
+                                updatesql(entrada,time_stamp,quem_sou,local,temp_send,humd_send,press_send);
                                 System.out.println(time_stamp);
+                                incrementEntrada();
                                 String[] data_input ={ time_stamp ,string_temp , string_humd , string_Press + "\n"};
                                 csv_write.writeNext(data_input);
                                 //Parte de processamento

@@ -47,11 +47,11 @@ public class Cliente_Simulado{
             float min_press_pretendido = 980.00f;
             float valorPress = 1.5f;
 
-            temp = (float) (Math.random() * max_temp_pretendido) + min_temp_pretendido;
+            temp = (float) (min_temp_pretendido + (Math.random() * ( max_temp_pretendido-  min_temp_pretendido)));
             System.out.println(temp);
-            humidade = (float) (Math.random() * max_hum_pretendido) + min_hum_pretendido;
+            humidade = (float)  (min_hum_pretendido + (Math.random() * ( max_hum_pretendido-  min_hum_pretendido)));
             System.out.println(humidade);
-            pressao = (float) (Math.random() * max_press_pretendido) + min_press_pretendido;
+            pressao = (float) (min_press_pretendido + (Math.random() * ( max_press_pretendido-  min_press_pretendido)));
             System.out.println(pressao);
 
             boolean send_authentication = true;

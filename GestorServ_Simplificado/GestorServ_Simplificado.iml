@@ -10,5 +10,6 @@
     <orderEntry type="library" name="groovy-4.0.0" level="project" />
     <orderEntry type="library" name="IntelliJ IDEA GridLayout" level="project" />
     <orderEntry type="library" name="opencsv" level="project" />
+    <orderEntry type="library" name="mysql.connector.java" level="project" />
   </component>
 </module>
