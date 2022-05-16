@@ -1,0 +1,22 @@
+A fazer fase C
+Site:
+	Gráficos na aba de dados
+	Update da tabela de dados todos os segundos ou a cada entrada de dados no sql (1º opção 
+	é mais viável) (2º opção é feita através de uma biblioteca socket.io).
+	Verificar se a página é alterada em outros dispositivos (Feito, página funciona independemente se o browser-sync estiver desligado).
+	
+Aplicação: 
+
+	Ajudar no código.
+	Ver como fazer os pedidos à API
+
+Sistema Central:
+- Modificar receção do datagrama de autenticação
+- Possibilidade 
+
+Sensores + gateway: 
+- Localização por gps (É preciso pagar mensalidade ou pelo modulo gps). Tirar primeiro a latitude e longitude online e depois por hardcoded ( feito).
+  AUTENTICAÇÃO - É enviada do gateway ou sistema simulado para o sistema central, de modo a enviar os seus dados para o mesmo. Caso este seja autenticado, a sua conexão ao sistema central é mantida e este recebera o sinal para começar o envio dos seus dados. (Feito)
+	TIPO - 1 byte, Password - 4 bytes , Host name - 7 bytes, Latitude - 6 bytes,Longitude 6 bytes-> total 24 bytes; (Feito)
+	Data - Timestamp inclui DD/MM/YYYY + HH/MM/SS (Feito)
+	
