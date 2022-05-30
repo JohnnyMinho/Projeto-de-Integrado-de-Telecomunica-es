@@ -1,0 +1,50 @@
+extends layout
+
+block layout-content
+  div.View.landingview
+    div
+      nav
+        img.image(src="/images/Logo_Uminho.jpeg",style='width:100px;height:75px;')
+        div.nav-links
+          ul.nav-links 
+            li
+              a(href="/index") Home
+                
+            li
+              a(href="/Equipa") Equipa
+              
+            li
+              a(href="/Relatorios") Relatorios
+            
+            li 
+              a(href="/dados") Dados 
+            if(!isAuthenticated)
+              li 
+                a(href="/login") Login
+            li 
+              a(href="/logout") LogOut
+            if(Usertype)
+              li 
+                a(href="/AdminDashBoard") Dashboard     
+      div 
+        h1.Banner Equipa 
+        div.teamcontainer
+          img.ImageBox(src='/images/Sins.png')
+          p.caption João Moura A93099
+          p.caption 3ºAno MIETI
+        div.teamcontainer
+          img.ImageBox(src='/images/André.png ')
+          p.caption Luis Pinto A94155
+          p.caption 3ºAno MIETI
+        div.teamcontainer
+          img.ImageBox(src='/images/Tarina.png') 
+          p.caption Catarina Amorim A93094
+          p.caption 3ºAno MIETI
+        div.teamcontainer
+          img.ImageBox(src='/images/Miguel.png')
+          p.caption Miguel Pereira A94152
+          p.caption 3ºAno MIETI
+        div.teamcontainer 
+          img.ImageBox(src='/images/Zé.png')
+          p.caption José Costa A94151
+          p.caption 3ºAno MIETI

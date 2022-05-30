@@ -1,0 +1,34 @@
+extends layout
+
+block layout-content
+  div.View.landingview
+    div
+      nav
+        img.image(src="/images/Logo_Uminho.jpeg",style='width:100px;height:75px;')
+        div.nav-links
+          ul.nav-links 
+            li
+              a(href="/index") Home
+                
+            li
+              a(href="/Equipa") Equipa
+              
+            li
+              a(href="/relatorios") Relatorios
+            
+            li 
+              a(href="/dados") Dados
+            if(!isAuthenticated)
+              li
+                a(href="/login") Login
+            if(isAuthenticated)   
+              li 
+                a(href="/logout") LogOut
+            if(Usertype)
+              li 
+                a(href="/AdminDashBoard") Dashboard    
+    div 
+      h1.Banner Bem-vindos ao nosso website!
+      h1.BannerText Somos um grupo de estudantes de engenharia de telecomunicaçoes e informática da Uminho.<br>
+                     | Este website é um dos pontos do nosso Projeto da UC de Projeto Integrado de Telecomunicações<br>
+                     |Neste website é possível ver os dados obtidos através de sensores, bem como o download dos relatórios associados a cada fase.

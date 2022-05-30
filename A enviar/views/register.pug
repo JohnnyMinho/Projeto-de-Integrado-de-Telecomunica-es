@@ -1,0 +1,65 @@
+extends layout
+
+block layout-content
+  div.View.landingview
+    div
+      nav
+        img.image(src="/images/Logo_Uminho.jpeg",style='width:100px;height:75px;')
+        div.nav-links
+          ul.nav-links 
+            li
+              a(href="/index") Home    
+            li
+              a(href="/Equipa") Equipa    
+            li
+              a(href="/relatorios") Relatorios
+            li 
+              a(href="/dados") Dados 
+            if(!isAuthenticated)
+              li 
+                a(href="/login") Login 
+            if(isAuthenticated)   
+              li 
+                a(href="/logout") LogOut
+            if(Usertype)
+              li 
+                a(href="/AdminDashBoard") Dashboard 
+    block content
+      div.text-center 
+
+        form(class="form-signin", method="POST" action="/Register")
+          #error
+            if error
+              p.text-danger ERROR! 
+          div.center
+            img.loginimage(src="/images/WebsiteLogo.jpeg")
+          h1 Please sign in
+          
+          //- Input
+          
+
+          label(for="inputName" class="sr-only") Nome
+          input(type="name" name ="name" id="inputName" class="form-control" placeholder="Name" 
+          data-toggle="tooltip" data-placement = "right" title ="Introduza um nome válido" required)   
+
+          label.h1(for="inputEmail" class="sr-only") E-mail
+          input(type="email" name ="username" id="inputEmail" class="form-control" placeholder="Email adress"
+          data-toggle="tooltip" data-placement = "right" title ="Introduza um e-mail válido" required autofocus)
+          
+          label(for="inputPassword" class="sr-only") Password
+          input(type="password" name ="password" id="inputPassword" class="form-control" placeholder="Password" 
+          data-toggle="tooltip" data-placement = "right" title ="Deve ter pelo menos 5 digitos dos quais um deve ser pelo menos, 1 número, 1 letra minuscula, 1 letra maiuscula e 1 caracter especial" required)   
+
+          label(for="inputPasswordc" class="sr-only") Confirme a Password
+          input(type="password" name ="passwordc" id="inputPasswordc" class="form-control" placeholder="Passwordc"
+          data-toggle="tooltip" data-placement = "right" title ="Repita a password que digitou acima"  required)   
+          if(isAuthenticated)
+            div 
+              label(for="inputRole" class="sr-only") Novo Admin?
+              input(type="checkbox" checked=false name ="Role" id="inputRole" placeholder = "Role")
+          
+         
+
+          -var buttonClass=['btn', 'btn-lg', 'btn-primary', 'btn-block'];
+            
+          button(class=buttonClass type="submit") Register

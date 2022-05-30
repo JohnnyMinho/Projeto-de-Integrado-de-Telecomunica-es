@@ -1,0 +1,54 @@
+extends layout
+
+block layout-content
+  div.View.landingviewData
+    div
+      nav
+        img.image(src="/images/Logo_Uminho.jpeg",style='width:100px;height:75px;')
+        div.nav-links
+          ul.nav-links 
+            li
+              a(href="/index") Home
+            li
+              a(href="/Equipa") Equipa
+            li
+              a(href="/relatorios") Relatorios
+            li 
+              a(href="/dados") Dados
+            if(!isAuthenticated)
+              li 
+                a(href="/login") Login
+            if(isAuthenticated)   
+              li 
+                a(href="/logout") LogOut
+            if(Usertype)
+              li 
+                a(href="/AdminDashBoard") Dashboard 
+    div.centertext
+      h1.textcolorwhite ULTIMAS 10 ENTRADAS
+    div 
+      table 
+        tr 
+          th Numero da Amostra 
+          th ID sensor
+          th TimeStamp 
+          th Latitude 
+          th Longitude
+          th Temperatura (Celsius)
+          th Humidade (%)
+          th Presão atmosférica
+        if(userData.length!=0)
+          each data in userData
+            tr 
+              td= data.ID_SC
+              td= data.ID
+              td= data.Timestamp
+              td= data.Latitude
+              td= data.Longitude
+              td= data.Temperatura
+              td= data.Humidade
+              td= data.Pressao
+        else
+            tr 
+              td NO DATA
+        
