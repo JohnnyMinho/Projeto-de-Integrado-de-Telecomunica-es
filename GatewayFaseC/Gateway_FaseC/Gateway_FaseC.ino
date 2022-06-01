@@ -14,15 +14,15 @@
 static BLEUUID UUID_SERVER_SERVICE ("72add083-b931-4efc-ba71-4eaf935e0465");
 static BLEUUID UUID_Characteristic_Server ("cf15383a-afe7-4d44-b24d-a6363e93793e");
 static BLEUUID UUID_TEMP_CHARACTERISTIC ("eea1aa7d-b9b9-4ddf-a575-05b7a37b139c"); //Tentar receber todos os dados na forma de uma só caracteristica de modo a poupar trabalho
-static BLEUUID UUID_HUMD_CHARACTERISTIC ("9d9031b5-191f-4e2d-9791-1c2240e74a8d");
-static BLEUUID UUID_PRESS_CHARACTERISTIC ("01bcb788-7258-43b3-be93-f35dad0ac2f4");
+static BLEUUID UUID_ERROR_CHARACTERISTIC ("9d9031b5-191f-4e2d-9791-1c2240e74a8d");
+static BLEUUID UUID_START_CHARACTERISTIC ("01bcb788-7258-43b3-be93-f35dad0ac2f4");
 
 BLEServer *Gateway_Server_BLE;
 BLEService *Gateway_Service;
 BLECharacteristic *Gateway_Received_Charac;
 BLECharacteristic *Gateway_Characteristic_TEMP;
-BLECharacteristic *Gateway_Characteristic_HUMD;
-BLECharacteristic *Gateway_Characteristic_PRESS;
+BLECharacteristic *Gateway_Characteristic_ERROR;
+BLECharacteristic *Gateway_Characteristic_START;
 //------------------------
 
 // Variáveis ligadas à WiFi
@@ -62,6 +62,7 @@ boolean time_configure_sent = false;
 boolean authenticated = false;
 boolean BeginByte_R = false;
 boolean ENDByte_R = false;
+boolean can_start = false;
 unsigned long lasttime_connected = 0;
 
 unsigned long current_epoch;
@@ -69,9 +70,12 @@ unsigned long current_epoch;
 char value_pacote[18];
 byte timestamp_HMS[9];
 byte timestamp_HMS_data[20];
+byte last_error_sent;
+unsigned long time_since_last_error = 0; // Caso seja o mesmo erro ao anterior, este verifica se já se passaram 30 segundos desde o ultima vez que foi enviado um aviso
 uint8_t pacote_dados[38];
 uint8_t pacote_auth[27];
-uint8_t pacote_erro[12];
+uint8_t pacote_start[3];
+uint8_t pacote_erro[11];
 byte pacote_comando[2];
 int test_speak = 0;
 
@@ -79,7 +83,7 @@ WiFiClient client;
 
 //-------------------------------
 void make_timestamp();
-void SendError(int tipo, byte Level);
+void SendError(int tipo);
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
       Serial.println("Device Connected");
@@ -89,7 +93,7 @@ class MyServerCallbacks: public BLEServerCallbacks {
       time_configure_sent = false;
       Serial.println("Device Disconnected");
       byte temp = (int) 1;
-      SendError(1,temp);
+      SendError(1);
     }
 };
 
@@ -104,13 +108,25 @@ class MyCallbacks: public BLECharacteristicCallbacks
     }
     void onWrite(BLECharacteristic *pCharacteristic)
     {
+      boolean erro = false;
+      boolean start = false;
       std::string value;
       if ((pCharacteristic->getUUID().equals(UUID_TEMP_CHARACTERISTIC)) && authenticated) {
         caracteristica_temp = true;
         value = pCharacteristic->getValue();
-        //Serial.println("HELLO");
+        //Serial.println("Recebi Dados");
+        //Serial.println(value.length());
       }
-      if (value.length() > 0)
+      if ((pCharacteristic->getUUID().equals(UUID_ERROR_CHARACTERISTIC)) && authenticated) {
+        erro = true;
+        value = pCharacteristic->getValue();
+      }
+      if ((pCharacteristic->getUUID().equals(UUID_START_CHARACTERISTIC)) && authenticated) {
+        start = true;
+        value = pCharacteristic->getValue();
+        //Serial.println("Recebi o Start");
+      }
+      if (caracteristica_temp && value.length() > 0)
       {
         memcpy(pacote_dados, &DATAbyte, sizeof(DATAbyte));
         for (int i = 0; i < value.length(); i++)
@@ -125,11 +141,42 @@ class MyCallbacks: public BLECharacteristicCallbacks
           }
         }
         pacote_dados[38] = '\0';
-        if ((sensor_temp_enviar)) {
-          Serial.println();
-          //temp_send = atof(value_temp);
-        }
         caracteristica_temp = false;
+      }
+      if (value.length() > 0 && erro) {
+        byte tipo_erro = (byte) value[0];
+        if (TCP_Stay_Connected && authenticated) {
+          if (last_error_sent == (byte) value[0] && (millis() - time_since_last_error) > 30000) {
+            last_error_sent = (byte) value[0];
+            time_since_last_error = millis();
+            SendError(tipo_erro);
+          } else if (last_error_sent != (byte) value[0]) {
+            last_error_sent = (byte) value[0];
+            time_since_last_error = millis();
+            SendError(tipo_erro);
+          }
+        }
+        erro = false;
+      }
+      if (value.length() > 0 && start) {
+        Serial.println("Entrei no start");
+        pacote_start[0] = STARTbyte;
+        for (int i = 0; i < value.length(); i++) {
+          pacote_start[i + 1] = value[i];
+          Serial.println(pacote_start[i]);
+        }
+        client.write((int)3);
+        delay(50);
+        client.write(pacote_start, 3);
+        /*byte msg[2];
+          char tipo_stop = '4';
+          msg[0] = 'Y';
+          msg[1] = tipo_stop;
+          msg[2] = '\0';
+          Gateway_Received_Charac->setValue(msg, 3);
+          Gateway_Received_Charac->notify();*/
+
+        start = false;
       }
     }
 };
@@ -155,6 +202,7 @@ void check_input() {
     }
   }
 }
+
 //EFETUA A CONEXÃO DA SOCKET AO SERVIDOR / GESTOR DE SERVIÇOS
 boolean connectTCP() {
   boolean temp = false;
@@ -166,7 +214,7 @@ boolean connectTCP() {
   return temp;
 }
 
-void send_time_sensor() { //PARA ENVIAR O TEMPO PARA FAZER SYNC DO SISTEMA SENSOR, APENAS ENVIAMOS O TEMPO NO FORMATO HH/MM/SS 
+void send_time_sensor() { //PARA ENVIAR O TEMPO PARA FAZER SYNC DO SISTEMA SENSOR, APENAS ENVIAMOS O TEMPO NO FORMATO HH/MM/SS
   time_t now;
   struct tm timestamp2;
   while (!getLocalTime(&timestamp2)) {
@@ -199,12 +247,12 @@ void sendAuthentication() {//PARA UMA QUESTÃO DE EFICIÊNCIA O LOCAL É ENVIADO
   memmove(pacote_auth + 12, latitude, 7);
   memmove(pacote_auth + 19, longitude, 7);
   pacote_auth[27] = '\0';
-  client.write((int)26);
+  client.write((int)27);
   delay(50);
-  client.write(pacote_auth, 26);
+  client.write(pacote_auth, 27);
 }
 
-void SendError(int level, byte tipo) {
+void SendError(int tipo) {
   time_t now;
   char temp_tempo[9];
   struct tm timestamp; //tm é uma struct que guarda os tempos em ints consoante o tipo (anos, meses, dias, etc)
@@ -216,23 +264,11 @@ void SendError(int level, byte tipo) {
     timestamp_HMS[i] = (byte)temp_tempo[i];
   }
   pacote_erro[0] = ERRORbyte;
-  if (level == 1) {
-    memmove(pacote_erro + 1, timestamp_HMS, 8);
-    pacote_erro[9] = tipo;
-    pacote_erro[10] = 'Y';
-    client.write((int)12);
-    delay(50);
-    client.write(pacote_erro, 12);
-  } else if (level == 0) {
-    memmove(pacote_erro + 1, timestamp_HMS, 8);
-    pacote_erro[10] = tipo;
-    pacote_erro[11] = 'N';
-    client.write((int)12);
-    delay(50);
-    client.write(pacote_erro, 12);
-  } else {
-    Serial.println("Nível de erro inválido");
-  }
+  memmove(pacote_erro + 1, timestamp_HMS, 8);
+  pacote_erro[9] = byte(tipo);
+  client.write((int)11);
+  delay(50);
+  client.write(pacote_erro, 11);
 }
 
 void SendPacket() {
@@ -256,6 +292,7 @@ void SendPacket() {
   client.write((int)37);
   delay(50);
   client.write(pacote_dados, 37);
+  memset(pacote_dados, ' ', 37);
 }
 
 void make_timestamp() { //Faz um timestamp através do servidor NTP,
@@ -289,22 +326,25 @@ void setup() {
                             BLECharacteristic::PROPERTY_NOTIFY );
   Gateway_Characteristic_TEMP = Gateway_Service -> createCharacteristic(UUID_TEMP_CHARACTERISTIC,
                                 BLECharacteristic::PROPERTY_READ |
-                                BLECharacteristic::PROPERTY_WRITE);
-  Gateway_Characteristic_HUMD = Gateway_Service -> createCharacteristic(UUID_HUMD_CHARACTERISTIC,
-                                BLECharacteristic::PROPERTY_READ |
-                                BLECharacteristic::PROPERTY_WRITE);
-  Gateway_Characteristic_PRESS = Gateway_Service -> createCharacteristic(UUID_PRESS_CHARACTERISTIC,
+                                BLECharacteristic::PROPERTY_WRITE |
+                                BLECharacteristic::PROPERTY_NOTIFY );
+  Gateway_Characteristic_ERROR = Gateway_Service -> createCharacteristic(UUID_ERROR_CHARACTERISTIC,
                                  BLECharacteristic::PROPERTY_READ |
-                                 BLECharacteristic::PROPERTY_WRITE);
+                                 BLECharacteristic::PROPERTY_WRITE |
+                                 BLECharacteristic::PROPERTY_NOTIFY );
+  Gateway_Characteristic_START = Gateway_Service -> createCharacteristic(UUID_START_CHARACTERISTIC,
+                                 BLECharacteristic::PROPERTY_READ |
+                                 BLECharacteristic::PROPERTY_WRITE |
+                                 BLECharacteristic::PROPERTY_NOTIFY );
 
   Gateway_Received_Charac->setCallbacks(new MyCallbacks());
   Gateway_Characteristic_TEMP -> setCallbacks(new MyCallbacks());
-  Gateway_Characteristic_HUMD -> setCallbacks(new MyCallbacks());
-  Gateway_Characteristic_PRESS -> setCallbacks(new MyCallbacks());
+  Gateway_Characteristic_ERROR -> setCallbacks(new MyCallbacks());
+  Gateway_Characteristic_START -> setCallbacks(new MyCallbacks());
   Gateway_Received_Charac -> setValue("GateWay_Sensor_UC_PIT_G1");
   Gateway_Characteristic_TEMP -> setValue(".");
-  Gateway_Characteristic_HUMD -> setValue(".");
-  Gateway_Characteristic_PRESS -> setValue(".");
+  Gateway_Characteristic_ERROR -> setValue(".");
+  Gateway_Characteristic_START -> setValue(".");
   Gateway_Service->start();
   BLEAdvertising *Ad_Servidor = BLEDevice::getAdvertising();
   Ad_Servidor->addServiceUUID(UUID_SERVER_SERVICE);
@@ -336,15 +376,16 @@ void setup() {
 void loop() {
   String toSend;
   int i;
+  boolean authentication_sent = false;
   if (!TCP_Stay_Connected) {
-    if(ENDByte_R){
-      Serial.println("Conexão encerrada pelo Gestor de Serviços");
-    }
     TCP_Stay_Connected = connectTCP();
     delay(2500);
   }
   if (TCP_Stay_Connected && !authenticated) {
-    sendAuthentication();
+    if (!authentication_sent) {
+      sendAuthentication();
+      authentication_sent = true;
+    }
     while (client.available() == 0) {
       Serial.println("Awaiting");
     }
@@ -353,41 +394,63 @@ void loop() {
       if (begin_byte == BEGINbyte) { //Caso o mesmo não aconteça o Gestor invalida a conexão
         BeginByte_R = true;
         authenticated = true;
-        client.write((int)1);
-        delay(50);
-        client.write(STARTbyte);
         lasttime_connected = millis(); //Tiramos esta medida para dar uma medida o mais próxima possível de 15 segundos
       }
     }
   }
   while (TCP_Stay_Connected && authenticated) {
-    check_input();
-    if (!client.connected()){ //Caso seja verificado que o Sistema Central perdeu a sua conexão com o gateway, é necessário tentar realizar uma reconexão.
-        Serial.println("CLIENTE FOI DISCONECTADO");
-        TCP_Stay_Connected = false;
-        authenticated = false;
-      }
+    if (!client.connected()) { //Caso seja verificado que o Sistema Central perdeu a sua conexão com o gateway, é necessário tentar realizar uma reconexão.
+      Serial.println("CLIENTE FOI DISCONECTADO");
+      TCP_Stay_Connected = false;
+      authenticated = false;
+      authentication_sent = false;
+      can_start = true;
+    }
     if (client.available() > 0) { //Quando o gateway recebeu uma autenticação e um byte de begin ele pode receber um byte END pelo que fica à espera de uma possível mensagem
-        int i = 0;
-        char tamanho_mensagem = client.read();
-        int tamanho = (int)tamanho_mensagem;
-        byte byte_recebido[tamanho];
-        while (client.available() > 0) {
-          byte_recebido[i] = client.read();
-          
-         /*if (byte_recebido[i] == BEGINbyte) {
-            Serial.println("Begin byte recebido");
-            BeginByte_R = true;
-          }*/
-          if (byte_recebido[i] == ENDbyte) {//Se O gateway receber um byte de END por parte do Gestor, ele invalida a sua conexão e termina-a
-            BeginByte_R = false;
-            TCP_Stay_Connected = false;
-            ENDByte_R = true;
-            Serial.println("End byte recebido");
-          }
-          i++;
+      int i = 0;
+      char tamanho_mensagem = client.read();
+      int tamanho = (int)tamanho_mensagem;
+      byte byte_recebido[tamanho];
+      while (client.available() > 0) {
+        byte_recebido[i] = client.read();
+        if (byte_recebido[i] == ENDbyte) {//Se O gateway receber um byte de END por parte do Gestor, ele invalida a sua conexão e termina-a
+          BeginByte_R = false;
+          TCP_Stay_Connected = false;
+          ENDByte_R = true;
+          Serial.println("End byte recebido");
         }
+        if (byte_recebido[i] == ERRORbyte) {
+          Serial.println("Error no Gestor de Serviços");
+        }
+        if (byte_recebido[i] == STOPbyte) {
+          uint8_t msg[2];
+          char tipo_stop = ' ';
+          msg[0] = 'N';
+          while (client.available()) {
+            char tipo_stop = (char) byte_recebido[i];
+            i++;
+          }
+          msg[1] = tipo_stop;
+          msg[2] = '\0';
+          Gateway_Received_Charac->setValue(msg, 3);
+          Gateway_Received_Charac->notify();
+        }
+        if (byte_recebido[i] == RESTARTbyte) {
+          uint8_t msg[2];
+          msg[0] = 'Y';
+          char tipo_restart = ' ';
+          while (client.available()) {
+            char tipo_restart = (char) byte_recebido[i];
+            i++;
+          }
+          msg[1] = tipo_restart;
+          msg[2] = '\0';
+          Gateway_Received_Charac->setValue(msg, 3);
+          Gateway_Received_Charac->notify();
+        }
+        i++;
       }
+    }
     if (Gateway_Server_BLE->getConnectedCount() <= 0) { //Se o gateway não tiver nenhum sistema sensor ligado a ele por mais do que 15 segundos
       time_configure_sent = false; // Ele mesmo envia uma mensagem de erro de nível alto de modo a terminar a conexão
       Serial.println("SEM SENSORES LIGADOS");
@@ -398,21 +461,21 @@ void loop() {
       Ad_Servidor->setMinPreferred(0x12);
       BLEDevice::startAdvertising();
       delay(500);
-      if((millis()-lasttime_connected)>27500){
-        char error_temp = '1';
-        SendError(1,(byte)error_temp);
+      if ((millis() - lasttime_connected) > 27500) {
+        SendError(4); //Não tem nenhum sistema sensor conectado por +/- 28 segundos, a conexão vai ser reniciada
       }
     }
-    else{
+    else {
       if (!time_configure_sent) { //Caso haja um sistema sensor conectado enviamos o tempo com o valor de epoch()
         delay(1000);
         send_time_sensor(); //Deste modo o sistema sensor é capaz de sincronizar o seu tempo com o gateway
         time_configure_sent = true;
       }
       while (sensor_temp_enviar && BeginByte_R) { //Se houver um sistema sensor ligado ao gateway e o sistema central tiver autorizado o envio de dados, o gateway começa a enviar dados
+        //Serial.println("TENHO DADOS PARA ENVIAR");
         make_timestamp();
         SendPacket();
-        Serial.print("Dados Enviados");
+        Serial.println(" Dados Enviados");
         sensor_temp_enviar = false;
       }
       lasttime_connected = millis(); //Enquanto houver um sistema sensor ligado ao gateway este continua atualizar este valor

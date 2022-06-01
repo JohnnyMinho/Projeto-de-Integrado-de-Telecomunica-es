@@ -20,7 +20,7 @@ int port = 4444;
 
 char* client_name = "SSMAIN1";
 
-byte STOPbyte = 0b00000001; // Tipo - 1, Timestamp - 8 (2bytes - horas, 2 bytes - minutos, 2 bytes - segundos)
+byte STOPbyte = 0b00000001; // Tipo - 1, what_to_stop (1 - DHT11, 2 - BMP, 3- Geral);
 
 byte STARTbyte = 0b00000010; // Tipo - 1
 
@@ -32,8 +32,9 @@ byte DATAbyte = 0b00000101; // Tipo - 1, Timestamp - 8, Dados - 17 bytes(5-TEMP,
 
 byte DISCbyte = 0b00000110; // Tipo - 1, Timestamp - 8 bytes
 
-byte ERRORbyte = 0b00000111; // Tipo -1 , Timestamp - 8 bytes , TipoErro (valor numérico, lista de tipos de erros vai acompanhar este programa) - 1 byte, Level - 1 
+byte ERRORbyte = 0b00000111; // Tipo - 1 , Timestamp - 8 bytes , TipoErro (valor numérico, lista de tipos de erros vai acompanhar este programa) - 1 byte, Level - 1 
 
+byte RESTARTbyte = 0b00001000; //Tipo - 1 , what_to_start (1 - DHT11, 2 - BMP, 3 - Geral);
 byte Authenticationbyte = 0b00001000;
 
 #endif
